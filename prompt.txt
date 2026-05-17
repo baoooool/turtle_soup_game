@@ -1,0 +1,4 @@
+TODOS:
+我在工作区中添加了audio——res素材，里面有非常多的音效和音乐素材
+1. 请添加素材：全局音乐请使用background.mp3（要重复播放）；按键音效使用switch audio文件中的素材；角色（包括LLM和玩家）的消息音效使用；其他事件，比如final guess结束时的音效使用jingles文件夹中的音效
+2. 在游戏开始时添加五秒的启动动画，可使用PixelPete'sArtAssets和audio_res中的素材，并要加入内容：this is a turtlesoup game developed by owen bao, jacky yang and px

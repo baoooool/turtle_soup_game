@@ -36,6 +36,12 @@ BASE_FONT_SIZE = max(24, int(42 * FONT_SCALE))
 STATUS_FONT_SIZE = max(20, int(34 * FONT_SCALE))
 TITLE_FONT_SIZE = max(32, int(58 * FONT_SCALE))
 UI_SCALE = 1.0
+WINDOW_WIDTH = 1440
+WINDOW_HEIGHT = 900
+MIN_WINDOW_WIDTH = 1180
+MIN_WINDOW_HEIGHT = 720
+STARTUP_CARD_RELWIDTH = 0.9
+STARTUP_SUBTITLE_WRAP = 1240
 PIXEL_ASSET_ROOT = PROJECT_ROOT / "PixelPete'sArtAssets" / "PixelPete'sArtAssets"
 PIXEL_UI_DIR = PIXEL_ASSET_ROOT / "Sprites" / "UI"
 PIXEL_SPRITES_DIR = PIXEL_ASSET_ROOT / "Sprites"
@@ -62,8 +68,8 @@ class TurtleSoupApp(ctk.CTk):
         ctk.set_window_scaling(UI_SCALE)
 
         self.title(_ui_text("Turtle Soup · Story Night"))
-        self.geometry("1200x760")
-        self.minsize(980, 640)
+        self.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
+        self.minsize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
         self.configure(fg_color="#151022")
 
         self.session = GameSession(context_window=CONTEXT_WINDOW)
@@ -82,6 +88,12 @@ class TurtleSoupApp(ctk.CTk):
         self._story_epoch = 0
         self._menu_layer = 1
         self._chat_row = 0
+        self._startup_active = False
+        self._startup_step = 0
+        self._startup_overlay: ctk.CTkFrame | None = None
+        self._startup_icon_label: ctk.CTkLabel | None = None
+        self._startup_status_label: ctk.CTkLabel | None = None
+        self._audio_env_warning_shown = False
         available_families = {name.lower() for name in tkfont.families(self)}
         family = "helvetica" if "helvetica" in available_families else "fixed"
         self.base_font = ctk.CTkFont(family=family, size=BASE_FONT_SIZE)
@@ -135,7 +147,7 @@ class TurtleSoupApp(ctk.CTk):
             font=self.base_font,
             text_color="#fef3c7",
             justify="left",
-            wraplength=740,
+            wraplength=1020,
             fg_color="#2e234a",
             image=self.pixel_images.get("agent_avatar"),
             compound="left",
@@ -235,6 +247,7 @@ class TurtleSoupApp(ctk.CTk):
         self.boot_progress = ctk.CTkProgressBar(self.main_panel, mode="indeterminate")
         self.boot_progress.grid(row=2, column=0, padx=24, pady=(0, 18), sticky="ew")
         self.boot_progress.start()
+        self._build_startup_overlay()
         self._show_menu_layer_one()
 
     def _pixel_button_style(self, primary: bool) -> dict[str, object]:
@@ -278,7 +291,7 @@ class TurtleSoupApp(ctk.CTk):
             if tileset.width >= tile_size * 2:
                 alt_tile = tileset.crop((tile_size, 0, tile_size * 2, tile_size))
 
-            canvas_size = (1200, 760)
+            canvas_size = (WINDOW_WIDTH, WINDOW_HEIGHT)
             canvas = Image.new("RGBA", canvas_size)
             for y in range(0, canvas_size[1], tile_size):
                 for x in range(0, canvas_size[0], tile_size):
@@ -330,6 +343,7 @@ class TurtleSoupApp(ctk.CTk):
 
     def _load_boot_sequence(self) -> None:
         self.status_label.configure(text=_ui_text("Loading stories and sounds..."))
+        self._start_startup_sequence()
         self.after(200, self._boot_async)
 
     def _boot_async(self) -> None:
@@ -339,6 +353,8 @@ class TurtleSoupApp(ctk.CTk):
                 self.sounds.initialize()
             except pygame.error:
                 pass
+            if self._startup_active:
+                self.after(0, lambda: self.sounds.play("startup"))
             self.after(0, self._finish_boot)
 
         threading.Thread(target=worker, daemon=True).start()
@@ -352,7 +368,77 @@ class TurtleSoupApp(ctk.CTk):
         else:
             self.status_label.configure(text=_ui_text("No stories found yet. Add a .txt story under stories/."))
         self._show_menu_layer_one()
+        self._warn_if_audio_environment_is_limited()
         self._warn_if_font_environment_is_limited()
+
+    def _build_startup_overlay(self) -> None:
+        overlay = ctk.CTkFrame(self.main_panel, corner_radius=0, fg_color="#0f0a1d")
+        overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
+        card = ctk.CTkFrame(overlay, fg_color="#1f1635", border_width=2, border_color="#7c3aed", corner_radius=12)
+        card.place(relx=0.5, rely=0.5, relwidth=STARTUP_CARD_RELWIDTH, anchor="center")
+        icon = ctk.CTkLabel(card, text="", image=self.pixel_images.get("agent_avatar"))
+        icon.pack(padx=24, pady=(20, 8))
+        title = ctk.CTkLabel(
+            card,
+            text=_ui_text("Turtle Soup"),
+            font=self.title_font,
+            text_color="#fef3c7",
+        )
+        title.pack(padx=24)
+        subtitle = ctk.CTkLabel(
+            card,
+            text=_ui_text("this is a turtlesoup game developed by owen bao, jacky yang and px"),
+            font=self.status_font,
+            text_color="#d8b4fe",
+            justify="center",
+            wraplength=STARTUP_SUBTITLE_WRAP,
+        )
+        subtitle.pack(padx=24, pady=(10, 12))
+        status = ctk.CTkLabel(
+            card,
+            text=_ui_text("Booting."),
+            font=self.status_font,
+            text_color="#93c5fd",
+        )
+        status.pack(padx=24, pady=(0, 20))
+        self._startup_overlay = overlay
+        self._startup_icon_label = icon
+        self._startup_status_label = status
+
+    def _start_startup_sequence(self) -> None:
+        if self._startup_overlay is None:
+            return
+        self._startup_active = True
+        self._startup_step = 0
+        self._animate_startup_overlay()
+        self.after(10000, self._end_startup_sequence)
+
+    def _animate_startup_overlay(self) -> None:
+        if not self._startup_active:
+            return
+        frames = [
+            self.pixel_images.get("agent_avatar"),
+            self.pixel_images.get("system_avatar"),
+            self.pixel_images.get("user_avatar"),
+            self.pixel_images.get("system_avatar"),
+        ]
+        colors = ["#93c5fd", "#c4b5fd", "#a7f3d0", "#d8b4fe"]
+        dots = "." * ((self._startup_step % 3) + 1)
+        frame = frames[self._startup_step % len(frames)]
+        if self._startup_icon_label and frame:
+            self._startup_icon_label.configure(image=frame)
+        if self._startup_status_label:
+            self._startup_status_label.configure(text=_ui_text(f"Booting{dots}"), text_color=colors[self._startup_step % len(colors)])
+        self._startup_step += 1
+        self.after(280, self._animate_startup_overlay)
+
+    def _end_startup_sequence(self) -> None:
+        self._startup_active = False
+        if self._startup_overlay is not None:
+            self._startup_overlay.destroy()
+            self._startup_overlay = None
+            self._startup_icon_label = None
+            self._startup_status_label = None
 
     def _warn_if_font_environment_is_limited(self) -> None:
         families = {name.lower() for name in tkfont.families(self)}
@@ -369,6 +455,16 @@ class TurtleSoupApp(ctk.CTk):
         )
         self._append_bubble("System", message, role="system")
         self.status_label.configure(text=_ui_text("Font environment limited: install scalable fonts to enable larger text"))
+
+    def _warn_if_audio_environment_is_limited(self) -> None:
+        if self._audio_env_warning_shown:
+            return
+        message = self.sounds.warning_message()
+        if message is None:
+            return
+        self._audio_env_warning_shown = True
+        self._append_bubble("System", message, role="system")
+        self.status_label.configure(text=_ui_text("Audio output unavailable: check WSL audio runtime"))
 
     def _render_story_buttons(self) -> None:
         for widget in self.story_list_frame.winfo_children():
@@ -427,10 +523,10 @@ class TurtleSoupApp(ctk.CTk):
 
     def _select_story_and_start(self, index: int) -> None:
         self.selected_story_index = index
-        self.sounds.play("click")
         self.on_start_story()
 
     def on_start_story(self) -> None:
+        self.sounds.play("click")
         if self.selected_story_index is None:
             messagebox.showinfo(_ui_text("Notice"), _ui_text("Please choose a story first."))
             return
@@ -442,18 +538,18 @@ class TurtleSoupApp(ctk.CTk):
         self._append_bubble("Soupy", "Ask your questions anytime. I will reply with only: Yes / No / Irrelevant.", role="agent")
         self.status_label.configure(text=_ui_text(f"Now playing: {story.title}"))
         self._show_game_screen()
-        self.sounds.play("click")
 
     def on_reset(self) -> None:
+        self.sounds.play("click")
         self.session.reset()
         self._story_epoch += 1
         self._set_thinking(False)
         self.question_entry.delete(0, tk.END)
         self.status_label.configure(text=_ui_text("New round ready"))
         self._show_menu_layer_two(first_prompt=False)
-        self.sounds.play("click")
 
     def on_ask_question(self) -> None:
+        self.sounds.play("click")
         if not self.session.can_ask():
             messagebox.showinfo(_ui_text("Notice"), _ui_text("Please start a story first."))
             return
@@ -501,9 +597,9 @@ class TurtleSoupApp(ctk.CTk):
         self.session.add_qa(question, answer)
         self._append_bubble("Soupy", answer, role="agent")
         self._set_thinking(False)
-        self.sounds.play("reply")
 
     def on_submit_guess(self) -> None:
+        self.sounds.play("click")
         if self.session.story is None:
             messagebox.showinfo(_ui_text("Notice"), _ui_text("Please start a story first."))
             return
@@ -611,12 +707,14 @@ class TurtleSoupApp(ctk.CTk):
         result: dict[str, str | None] = {"value": None}
 
         def submit() -> None:
+            self.sounds.play("click")
             value = guess_box.get("1.0", "end").strip()
             if value:
                 result["value"] = value
             dialog.destroy()
 
         def cancel() -> None:
+            self.sounds.play("click")
             dialog.destroy()
 
         ctk.CTkButton(
@@ -744,6 +842,7 @@ class TurtleSoupApp(ctk.CTk):
             text_color=message_color,
             font=self.base_font,
         ).pack(padx=14, pady=(0, 10), fill="x")
+        self.sounds.play_message(role)
         self._chat_row += 1
 
         canvas = getattr(self.chat_stream, "_parent_canvas", None)
