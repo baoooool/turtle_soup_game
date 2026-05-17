@@ -5,12 +5,14 @@ import re
 import threading
 import tkinter as tk
 import tkinter.font as tkfont
+from pathlib import Path
 from tkinter import messagebox
 
 import customtkinter as ctk
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame
 from openai import OpenAIError
+from PIL import Image
 
 from app.audio.sound_manager import SoundManager
 from app.config import (
@@ -19,6 +21,7 @@ from app.config import (
     MODEL_BASE_URL,
     MODEL_NAME,
     MODEL_TEMPERATURE,
+    PROJECT_ROOT,
     SFX_DIR,
     STORIES_DIR,
 )
@@ -33,6 +36,10 @@ BASE_FONT_SIZE = max(24, int(42 * FONT_SCALE))
 STATUS_FONT_SIZE = max(20, int(34 * FONT_SCALE))
 TITLE_FONT_SIZE = max(32, int(58 * FONT_SCALE))
 UI_SCALE = 1.0
+PIXEL_ASSET_ROOT = PROJECT_ROOT / "PixelPete'sArtAssets" / "PixelPete'sArtAssets"
+PIXEL_UI_DIR = PIXEL_ASSET_ROOT / "Sprites" / "UI"
+PIXEL_SPRITES_DIR = PIXEL_ASSET_ROOT / "Sprites"
+PIXEL_GB_DIR = PIXEL_ASSET_ROOT / "GameBoy"
 
 
 def _ui_text(text: str) -> str:
@@ -57,6 +64,7 @@ class TurtleSoupApp(ctk.CTk):
         self.title(_ui_text("Turtle Soup · Story Night"))
         self.geometry("1200x760")
         self.minsize(980, 640)
+        self.configure(fg_color="#151022")
 
         self.session = GameSession(context_window=CONTEXT_WINDOW)
         self.llm = LLMEngine(
@@ -73,12 +81,15 @@ class TurtleSoupApp(ctk.CTk):
         self._thinking_step = 0
         self._story_epoch = 0
         self._menu_layer = 1
+        self._chat_row = 0
         available_families = {name.lower() for name in tkfont.families(self)}
         family = "helvetica" if "helvetica" in available_families else "fixed"
         self.base_font = ctk.CTkFont(family=family, size=BASE_FONT_SIZE)
         self.status_font = ctk.CTkFont(family=family, size=STATUS_FONT_SIZE)
         self.title_font = ctk.CTkFont(family=family, size=TITLE_FONT_SIZE, weight="bold")
         self._font_env_warning_shown = False
+        self.pixel_images: dict[str, ctk.CTkImage] = {}
+        self._load_pixel_assets()
 
         self._build_layout()
         self._load_boot_sequence()
@@ -87,16 +98,22 @@ class TurtleSoupApp(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
 
-        self.main_panel = ctk.CTkFrame(self, corner_radius=0)
+        self.main_panel = ctk.CTkFrame(self, corner_radius=0, fg_color="#1b1530")
         self.main_panel.grid(row=0, column=0, sticky="nsew")
         self.main_panel.grid_columnconfigure(0, weight=1)
         self.main_panel.grid_rowconfigure(1, weight=1)
+        if self.pixel_images.get("bg"):
+            self.background_art = ctk.CTkLabel(self.main_panel, text="", image=self.pixel_images["bg"])
+            self.background_art.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
+            self.background_art.lower()
 
         self.status_label = ctk.CTkLabel(
             self.main_panel,
             text=_ui_text("Getting things ready..."),
             font=self.status_font,
-            text_color="#9ca3af",
+            text_color="#c7d2fe",
+            image=self.pixel_images.get("system_avatar"),
+            compound="left",
         )
         self.status_label.grid(row=0, column=0, padx=24, pady=(20, 8), sticky="w")
 
@@ -105,7 +122,7 @@ class TurtleSoupApp(ctk.CTk):
         self.screen_stack.grid_columnconfigure(0, weight=1)
         self.screen_stack.grid_rowconfigure(0, weight=1)
 
-        self.menu_screen = ctk.CTkFrame(self.screen_stack)
+        self.menu_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
         self.menu_screen.grid(row=0, column=0, sticky="nsew")
         self.menu_screen.grid_columnconfigure(0, weight=1)
         self.menu_screen.grid_rowconfigure(3, weight=1)
@@ -116,11 +133,13 @@ class TurtleSoupApp(ctk.CTk):
             self.menu_bubble_wrap,
             text="",
             font=self.base_font,
-            text_color="#e5e7eb",
+            text_color="#fef3c7",
             justify="left",
             wraplength=740,
-            fg_color="#1f2937",
-            corner_radius=16,
+            fg_color="#2e234a",
+            image=self.pixel_images.get("agent_avatar"),
+            compound="left",
+            corner_radius=8,
             padx=16,
             pady=12,
         )
@@ -131,6 +150,9 @@ class TurtleSoupApp(ctk.CTk):
             text=_ui_text("Nice to meet you"),
             command=self._go_to_story_layer,
             font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=True),
         )
         self.menu_action_button.grid(row=1, column=0, padx=24, pady=(2, 12), sticky="w")
 
@@ -143,8 +165,9 @@ class TurtleSoupApp(ctk.CTk):
 
         self.story_list_frame = ctk.CTkScrollableFrame(self.menu_screen, width=900)
         self.story_list_frame.grid(row=3, column=0, padx=24, pady=(0, 20), sticky="nsew")
+        self.story_list_frame.configure(fg_color="#2b2046")
 
-        self.game_screen = ctk.CTkFrame(self.screen_stack)
+        self.game_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
         self.game_screen.grid(row=0, column=0, sticky="nsew")
         self.game_screen.grid_columnconfigure(0, weight=1)
         self.game_screen.grid_rowconfigure(0, weight=1)
@@ -152,6 +175,7 @@ class TurtleSoupApp(ctk.CTk):
         self.chat_stream = ctk.CTkScrollableFrame(self.game_screen)
         self.chat_stream.grid(row=0, column=0, padx=12, pady=(8, 6), sticky="nsew")
         self.chat_stream.grid_columnconfigure(0, weight=1)
+        self.chat_stream.configure(fg_color="#2b2046")
 
         self.thinking_label = ctk.CTkLabel(self.game_screen, text="", font=self.status_font, text_color="#60a5fa")
         self.thinking_label.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="w")
@@ -164,6 +188,10 @@ class TurtleSoupApp(ctk.CTk):
             self.action_row,
             placeholder_text=_ui_text("Ask anything to uncover the truth..."),
             font=self.base_font,
+            fg_color="#140f25",
+            border_width=2,
+            border_color="#8b5cf6",
+            text_color="#f8fafc",
         )
         self.question_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
         self.question_entry.bind("<Return>", lambda _event: self.on_ask_question())
@@ -174,6 +202,9 @@ class TurtleSoupApp(ctk.CTk):
             width=110,
             command=self.on_ask_question,
             font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=True),
         )
         self.ask_button.grid(row=0, column=1, padx=(0, 8))
 
@@ -183,6 +214,9 @@ class TurtleSoupApp(ctk.CTk):
             width=170,
             command=self.on_submit_guess,
             font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
         )
         self.guess_button.grid(row=0, column=2, padx=(0, 8))
 
@@ -191,6 +225,9 @@ class TurtleSoupApp(ctk.CTk):
             text=_ui_text("Back to Story Menu"),
             command=self.on_reset,
             font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
         )
         self.back_to_menu_button.grid(row=0, column=3)
         self.back_to_menu_button.grid_remove()
@@ -199,6 +236,46 @@ class TurtleSoupApp(ctk.CTk):
         self.boot_progress.grid(row=2, column=0, padx=24, pady=(0, 18), sticky="ew")
         self.boot_progress.start()
         self._show_menu_layer_one()
+
+    def _pixel_button_style(self, primary: bool) -> dict[str, object]:
+        if primary:
+            return {
+                "fg_color": "#7c3aed",
+                "hover_color": "#8b5cf6",
+                "border_width": 2,
+                "border_color": "#c4b5fd",
+                "corner_radius": 6,
+                "text_color": "#fef3c7",
+            }
+        return {
+            "fg_color": "#334155",
+            "hover_color": "#475569",
+            "border_width": 2,
+            "border_color": "#94a3b8",
+            "corner_radius": 6,
+            "text_color": "#f8fafc",
+        }
+
+    def _load_pixel_assets(self) -> None:
+        self._load_pixel_asset("bg", PIXEL_GB_DIR / "GameBoyBGSprites.png", zoom=2)
+        self._load_pixel_asset("agent_avatar", PIXEL_SPRITES_DIR / "MaleCharacter.png", zoom=3)
+        self._load_pixel_asset("user_avatar", PIXEL_SPRITES_DIR / "CatKid.png", zoom=3)
+        self._load_pixel_asset("system_avatar", PIXEL_SPRITES_DIR / "Fox.png", zoom=4)
+        self._load_pixel_asset("button_icon", PIXEL_UI_DIR / "Map-Node.png", zoom=3)
+        self._load_pixel_asset("story_icon", PIXEL_UI_DIR / "ItemSlot1.png", zoom=1)
+
+    def _load_pixel_asset(self, key: str, path: Path, zoom: int = 1) -> None:
+        if not path.exists():
+            return
+        try:
+            with Image.open(path) as raw:
+                image = raw.convert("RGBA")
+            if zoom > 1:
+                resampling = getattr(Image, "Resampling", Image)
+                image = image.resize((image.width * zoom, image.height * zoom), resampling.NEAREST)
+            self.pixel_images[key] = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
+        except (OSError, tk.TclError):
+            return
 
     def _load_boot_sequence(self) -> None:
         self.status_label.configure(text=_ui_text("Loading stories and sounds..."))
@@ -252,6 +329,9 @@ class TurtleSoupApp(ctk.CTk):
                 text=_ui_text(story.title),
                 anchor="w",
                 font=self.base_font,
+                image=self.pixel_images.get("story_icon"),
+                compound="left",
+                **self._pixel_button_style(primary=False),
                 command=lambda i=index: self._select_story_and_start(i),
             )
             button.pack(fill="x", padx=6, pady=6)
@@ -442,6 +522,7 @@ class TurtleSoupApp(ctk.CTk):
         dialog.title(_ui_text("Final Theory"))
         dialog.geometry("920x560")
         dialog.minsize(760, 460)
+        dialog.configure(fg_color="#1f1635")
         dialog.transient(self)
         dialog.lift()
         dialog.update_idletasks()
@@ -456,9 +537,20 @@ class TurtleSoupApp(ctk.CTk):
             font=self.base_font,
             anchor="w",
             justify="left",
+            text_color="#fef3c7",
+            image=self.pixel_images.get("agent_avatar"),
+            compound="left",
         ).grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
 
-        guess_box = ctk.CTkTextbox(dialog, wrap="word", font=self.base_font)
+        guess_box = ctk.CTkTextbox(
+            dialog,
+            wrap="word",
+            font=self.base_font,
+            fg_color="#140f25",
+            border_width=2,
+            border_color="#8b5cf6",
+            text_color="#f8fafc",
+        )
         guess_box.grid(row=1, column=0, padx=20, pady=(0, 12), sticky="nsew")
         guess_box.focus_set()
 
@@ -476,10 +568,26 @@ class TurtleSoupApp(ctk.CTk):
         def cancel() -> None:
             dialog.destroy()
 
-        ctk.CTkButton(button_row, text=_ui_text("Cancel"), command=cancel, font=self.base_font).pack(
+        ctk.CTkButton(
+            button_row,
+            text=_ui_text("Cancel"),
+            command=cancel,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
+        ).pack(
             side="right", padx=(10, 0)
         )
-        ctk.CTkButton(button_row, text=_ui_text("Submit"), command=submit, font=self.base_font).pack(side="right")
+        ctk.CTkButton(
+            button_row,
+            text=_ui_text("Submit"),
+            command=submit,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=True),
+        ).pack(side="right")
         dialog.bind("<Escape>", lambda _event: cancel())
         dialog.bind("<Control-Return>", lambda _event: submit())
         dialog.protocol("WM_DELETE_WINDOW", cancel)
@@ -515,30 +623,52 @@ class TurtleSoupApp(ctk.CTk):
     def _clear_chat_bubbles(self) -> None:
         for widget in self.chat_stream.winfo_children():
             widget.destroy()
+        self._chat_row = 0
 
     def _append_bubble(self, speaker: str, text: str, role: str) -> None:
         is_user = role == "user"
         if is_user:
             row_frame = ctk.CTkFrame(self.chat_stream, fg_color="transparent")
             row_frame.grid_columnconfigure(0, weight=1)
-            row_frame.grid(sticky="ew", padx=4, pady=6)
-            bubble = ctk.CTkFrame(row_frame, fg_color="#2563eb", corner_radius=16)
+            row_frame.grid(row=self._chat_row, column=0, sticky="ew", padx=4, pady=6)
+            bubble = ctk.CTkFrame(
+                row_frame,
+                fg_color="#3b2f5f",
+                border_width=2,
+                border_color="#a78bfa",
+                corner_radius=8,
+            )
             bubble.grid(row=0, column=1, sticky="e", padx=(130, 0))
-            text_color = "#ffffff"
+            text_color = "#ede9fe"
+            avatar = self.pixel_images.get("user_avatar")
         elif role == "system":
             row_frame = ctk.CTkFrame(self.chat_stream, fg_color="transparent")
             row_frame.grid_columnconfigure(0, weight=1)
-            row_frame.grid(sticky="ew", padx=4, pady=6)
-            bubble = ctk.CTkFrame(row_frame, fg_color="#7c3aed", corner_radius=16)
+            row_frame.grid(row=self._chat_row, column=0, sticky="ew", padx=4, pady=6)
+            bubble = ctk.CTkFrame(
+                row_frame,
+                fg_color="#4c1d95",
+                border_width=2,
+                border_color="#c4b5fd",
+                corner_radius=8,
+            )
             bubble.grid(row=0, column=0, sticky="w", padx=(0, 130))
             text_color = "#f5f3ff"
+            avatar = self.pixel_images.get("system_avatar")
         else:
             row_frame = ctk.CTkFrame(self.chat_stream, fg_color="transparent")
             row_frame.grid_columnconfigure(0, weight=1)
-            row_frame.grid(sticky="ew", padx=4, pady=6)
-            bubble = ctk.CTkFrame(row_frame, fg_color="#1f2937", corner_radius=16)
+            row_frame.grid(row=self._chat_row, column=0, sticky="ew", padx=4, pady=6)
+            bubble = ctk.CTkFrame(
+                row_frame,
+                fg_color="#2f234c",
+                border_width=2,
+                border_color="#8b5cf6",
+                corner_radius=8,
+            )
             bubble.grid(row=0, column=0, sticky="w", padx=(0, 130))
-            text_color = "#e5e7eb"
+            text_color = "#fef3c7"
+            avatar = self.pixel_images.get("agent_avatar")
 
         ctk.CTkLabel(
             bubble,
@@ -548,7 +678,10 @@ class TurtleSoupApp(ctk.CTk):
             wraplength=760,
             text_color=text_color,
             font=self.base_font,
+            image=avatar,
+            compound="left",
         ).pack(padx=14, pady=10, fill="both")
+        self._chat_row += 1
 
         canvas = getattr(self.chat_stream, "_parent_canvas", None)
         if canvas is not None:
