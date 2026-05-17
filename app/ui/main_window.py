@@ -104,7 +104,7 @@ class TurtleSoupApp(ctk.CTk):
         self.main_panel.grid_rowconfigure(1, weight=1)
         if self.pixel_images.get("bg"):
             self.background_art = ctk.CTkLabel(self.main_panel, text="", image=self.pixel_images["bg"])
-            self.background_art.place(relx=1.0, rely=1.0, anchor="se", x=-10, y=-10)
+            self.background_art.place(relx=0.5, rely=0.5, anchor="center")
             self.background_art.lower()
 
         self.status_label = ctk.CTkLabel(
@@ -175,7 +175,7 @@ class TurtleSoupApp(ctk.CTk):
         self.chat_stream = ctk.CTkScrollableFrame(self.game_screen)
         self.chat_stream.grid(row=0, column=0, padx=12, pady=(8, 6), sticky="nsew")
         self.chat_stream.grid_columnconfigure(0, weight=1)
-        self.chat_stream.configure(fg_color="#2b2046")
+        self.chat_stream.configure(fg_color="#17142a")
 
         self.thinking_label = ctk.CTkLabel(self.game_screen, text="", font=self.status_font, text_color="#60a5fa")
         self.thinking_label.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="w")
@@ -257,25 +257,76 @@ class TurtleSoupApp(ctk.CTk):
         }
 
     def _load_pixel_assets(self) -> None:
-        self._load_pixel_asset("bg", PIXEL_GB_DIR / "GameBoyBGSprites.png", zoom=2)
-        self._load_pixel_asset("agent_avatar", PIXEL_SPRITES_DIR / "MaleCharacter.png", zoom=3)
-        self._load_pixel_asset("user_avatar", PIXEL_SPRITES_DIR / "CatKid.png", zoom=3)
+        self._load_richer_background()
+        self._load_pixel_asset("agent_avatar", PIXEL_SPRITES_DIR / "BunnyBoy.png", zoom=4, frame_index=1)
+        self._load_pixel_asset("user_avatar", PIXEL_SPRITES_DIR / "CatKid.png", zoom=3, frame_index=1)
         self._load_pixel_asset("system_avatar", PIXEL_SPRITES_DIR / "Fox.png", zoom=4)
         self._load_pixel_asset("button_icon", PIXEL_UI_DIR / "Map-Node.png", zoom=3)
         self._load_pixel_asset("story_icon", PIXEL_UI_DIR / "ItemSlot1.png", zoom=1)
 
-    def _load_pixel_asset(self, key: str, path: Path, zoom: int = 1) -> None:
+    def _load_richer_background(self) -> None:
+        tile_path = PIXEL_SPRITES_DIR / "ForrestTiles.png"
+        if not tile_path.exists():
+            self._load_pixel_asset("bg", PIXEL_GB_DIR / "GameBoyBGSprites.png", zoom=2)
+            return
+        try:
+            with Image.open(tile_path) as raw:
+                tileset = raw.convert("RGBA")
+            tile_size = 16
+            base_tile = tileset.crop((0, 0, tile_size, tile_size))
+            alt_tile = None
+            if tileset.width >= tile_size * 2:
+                alt_tile = tileset.crop((tile_size, 0, tile_size * 2, tile_size))
+
+            canvas_size = (1200, 760)
+            canvas = Image.new("RGBA", canvas_size)
+            for y in range(0, canvas_size[1], tile_size):
+                for x in range(0, canvas_size[0], tile_size):
+                    tile = alt_tile if alt_tile and ((x // tile_size + y // tile_size) % 2 == 0) else base_tile
+                    canvas.paste(tile, (x, y), tile)
+
+            # Darken the texture so foreground UI remains readable.
+            overlay = Image.new("RGBA", canvas_size, (20, 16, 36, 130))
+            image = Image.alpha_composite(canvas, overlay)
+            self.pixel_images["bg"] = ctk.CTkImage(light_image=image, dark_image=image, size=canvas_size)
+        except (OSError, tk.TclError):
+            self._load_pixel_asset("bg", PIXEL_GB_DIR / "GameBoyBGSprites.png", zoom=2)
+
+    def _load_pixel_asset(self, key: str, path: Path, zoom: int = 1, frame_index: int | None = None) -> None:
         if not path.exists():
             return
         try:
             with Image.open(path) as raw:
                 image = raw.convert("RGBA")
+            if frame_index is not None:
+                image = self._extract_sprite_frame(image, frame_index)
             if zoom > 1:
                 resampling = getattr(Image, "Resampling", Image)
                 image = image.resize((image.width * zoom, image.height * zoom), resampling.NEAREST)
             self.pixel_images[key] = ctk.CTkImage(light_image=image, dark_image=image, size=image.size)
         except (OSError, tk.TclError):
             return
+
+    def _extract_sprite_frame(self, image: Image.Image, frame_index: int) -> Image.Image:
+        alpha = image.getchannel("A")
+        if alpha.getbbox() is None:
+            return image
+        columns = [alpha.crop((x, 0, x + 1, image.height)).getbbox() is not None for x in range(image.width)]
+        segments: list[tuple[int, int]] = []
+        start: int | None = None
+        for x, has_pixels in enumerate(columns):
+            if has_pixels and start is None:
+                start = x
+            elif not has_pixels and start is not None:
+                segments.append((start, x))
+                start = None
+        if start is not None:
+            segments.append((start, image.width))
+        if not segments:
+            return image
+        safe_index = min(max(frame_index, 0), len(segments) - 1)
+        left, right = segments[safe_index]
+        return image.crop((left, 0, right, image.height))
 
     def _load_boot_sequence(self) -> None:
         self.status_label.configure(text=_ui_text("Loading stories and sounds..."))
@@ -633,13 +684,14 @@ class TurtleSoupApp(ctk.CTk):
             row_frame.grid(row=self._chat_row, column=0, sticky="ew", padx=4, pady=6)
             bubble = ctk.CTkFrame(
                 row_frame,
-                fg_color="#3b2f5f",
+                fg_color="#1f3654",
                 border_width=2,
-                border_color="#a78bfa",
+                border_color="#7dd3fc",
                 corner_radius=8,
             )
             bubble.grid(row=0, column=1, sticky="e", padx=(130, 0))
-            text_color = "#ede9fe"
+            speaker_color = "#bae6fd"
+            message_color = "#e2e8f0"
             avatar = self.pixel_images.get("user_avatar")
         elif role == "system":
             row_frame = ctk.CTkFrame(self.chat_stream, fg_color="transparent")
@@ -647,13 +699,14 @@ class TurtleSoupApp(ctk.CTk):
             row_frame.grid(row=self._chat_row, column=0, sticky="ew", padx=4, pady=6)
             bubble = ctk.CTkFrame(
                 row_frame,
-                fg_color="#4c1d95",
+                fg_color="#3a275a",
                 border_width=2,
                 border_color="#c4b5fd",
                 corner_radius=8,
             )
             bubble.grid(row=0, column=0, sticky="w", padx=(0, 130))
-            text_color = "#f5f3ff"
+            speaker_color = "#ddd6fe"
+            message_color = "#f5f3ff"
             avatar = self.pixel_images.get("system_avatar")
         else:
             row_frame = ctk.CTkFrame(self.chat_stream, fg_color="transparent")
@@ -661,26 +714,36 @@ class TurtleSoupApp(ctk.CTk):
             row_frame.grid(row=self._chat_row, column=0, sticky="ew", padx=4, pady=6)
             bubble = ctk.CTkFrame(
                 row_frame,
-                fg_color="#2f234c",
+                fg_color="#22453f",
                 border_width=2,
-                border_color="#8b5cf6",
+                border_color="#6ee7b7",
                 corner_radius=8,
             )
             bubble.grid(row=0, column=0, sticky="w", padx=(0, 130))
-            text_color = "#fef3c7"
+            speaker_color = "#a7f3d0"
+            message_color = "#ecfeff"
             avatar = self.pixel_images.get("agent_avatar")
 
         ctk.CTkLabel(
             bubble,
-            text=_ui_text(f"{speaker}\n{text}"),
+            text=_ui_text(speaker),
             justify="left",
             anchor="w",
             wraplength=760,
-            text_color=text_color,
+            text_color=speaker_color,
             font=self.base_font,
             image=avatar,
             compound="left",
-        ).pack(padx=14, pady=10, fill="both")
+        ).pack(padx=14, pady=(10, 4), fill="x")
+        ctk.CTkLabel(
+            bubble,
+            text=_ui_text(text),
+            justify="left",
+            anchor="w",
+            wraplength=760,
+            text_color=message_color,
+            font=self.base_font,
+        ).pack(padx=14, pady=(0, 10), fill="x")
         self._chat_row += 1
 
         canvas = getattr(self.chat_stream, "_parent_canvas", None)
