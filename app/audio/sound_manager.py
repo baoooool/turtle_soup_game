@@ -93,6 +93,7 @@ class SoundManager:
             "success": 5,
             "fail": 6,
             "startup": 7,
+            "message_bob": 8,
         }
         self.channels.clear()
         for name, index in channel_map.items():
@@ -106,6 +107,7 @@ class SoundManager:
         self._try_load("message_user", switch_audio / "rollover2.ogg")
         self._try_load("message_agent", switch_audio / "rollover5.ogg")
         self._try_load("message_system", switch_audio / "rollover3.ogg")
+        self._try_load("message_bob", switch_audio / "rollover6.ogg")
         self._try_load("success", self.audio_dir / "8-Bit jingles" / "jingles_NES10.ogg")
         self._try_load("fail", self.audio_dir / "Hit jingles" / "jingles_HIT11.ogg")
         self._try_load("startup", self.audio_dir / "Steel jingles" / "jingles_STEEL00.ogg")
@@ -142,6 +144,8 @@ class SoundManager:
     def play_message(self, role: str) -> None:
         if role == "user":
             self.play("message_user")
+        elif role == "bob":
+            self.play("message_bob")
         elif role == "system":
             self.play("message_system")
         else:

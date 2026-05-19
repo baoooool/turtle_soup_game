@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import json
 import re
+from typing import Literal
 
 from openai import OpenAI
 
@@ -20,12 +21,36 @@ Output must be valid JSON in this format:
 {"hit": true/false, "score": 0-100, "comment": "short English feedback"}
 """
 
+JUDGE_RETRY_SUFFIX = """Your previous output was invalid. Output ONLY a single JSON object in the exact schema, no markdown, no extra text."""
+
+BOB_SYSTEM_PROMPT = """You MUST act as a calm, rational, and analytical player named Bob in a Turtle Soup game.
+Your purpose is to help the human player eliminate wrong assumptions by asking precise, closed yes/no questions.
+Focus on evidence-driven reasoning, avoid unfounded speculation, and keep questions concise and logical.
+Only decide to guess when you have a coherent, testable hypothesis that aligns with the known answers.
+Output STRICT JSON only in one of these formats:
+{"action": "question", "text": "a yes/no/irrelevant question"}
+{"action": "guess", "text": "a concise final theory"}
+No extra keys. No markdown. No commentary."""
+
+BOB_ACTION_RETRY_SUFFIX = """Your previous output was invalid. Return ONLY strict JSON with keys action and text. No extra text."""
+
+BOB_JUDGE_SYSTEM_PROMPT = """You are Soupie, the Turtle Soup host. Judge Bob's final guess against the canonical answer.
+Output must be valid JSON:
+{"hit": true/false, "score": 0-100, "comment": "short English feedback"}
+If score is below 80, include a brief, professional note about missing evidence or logic gaps."""
+
 
 @dataclass(slots=True)
 class JudgeResult:
     hit: bool
     score: int
     comment: str
+
+
+@dataclass(slots=True)
+class BobAction:
+    action: Literal["question", "guess"]
+    text: str
 
 
 class LLMEngine:
@@ -109,36 +134,51 @@ class LLMEngine:
         return "Irrelevant"
 
     def judge_guess(self, *, bottom: str, guess: str) -> JudgeResult:
+        return self._judge_guess_with_prompt(
+            bottom=bottom,
+            guess=guess,
+            system_prompt=JUDGE_SYSTEM_PROMPT,
+            guess_label="Player Guess",
+        )
+
+    def judge_bob_guess(self, *, bottom: str, guess: str) -> JudgeResult:
+        return self._judge_guess_with_prompt(
+            bottom=bottom,
+            guess=guess,
+            system_prompt=BOB_JUDGE_SYSTEM_PROMPT,
+            guess_label="Bob Guess",
+        )
+
+    def generate_bob_action(self, *, surface: str, history: list[QAItem]) -> BobAction:
+        context_block = self._build_context_lines(history)
         user_prompt = (
-            f"[Ground Truth]\n{bottom}\n\n"
-            f"[Player Guess]\n{guess}\n\n"
+            f"[Surface]\n{surface}\n\n"
+            f"[History]\n{context_block}\n\n"
             "Output JSON only."
         )
 
-        response = self.client.chat.completions.create(
-            model=self.model,
-            temperature=0.2,
-            messages=[
-                {"role": "system", "content": JUDGE_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        raw = (response.choices[0].message.content or "").strip()
-        json_text = self._extract_json_object(raw)
-        if not json_text:
-            return JudgeResult(hit=False, score=40, comment="Close, but key causal links are still missing.")
+        retry_temps = [self.temperature, max(0.0, self.temperature - 0.1), 0.0]
+        for i in range(self.max_retries):
+            system_prompt = BOB_SYSTEM_PROMPT
+            if i > 0:
+                system_prompt = f"{BOB_SYSTEM_PROMPT}\n{BOB_ACTION_RETRY_SUFFIX}"
+            response = self.client.chat.completions.create(
+                model=self.model,
+                temperature=retry_temps[min(i, len(retry_temps) - 1)],
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            raw = response.choices[0].message.content or ""
+            action = self._parse_bob_action(raw)
+            if action:
+                return action
 
-        try:
-            payload = json.loads(json_text)
-        except json.JSONDecodeError:
-            return JudgeResult(hit=False, score=40, comment="Close, but key causal links are still missing.")
-        hit = bool(payload.get("hit", False))
-        score = int(payload.get("score", 0))
-        score = max(0, min(100, score))
-        comment = str(payload.get("comment", ""))
-        if not comment:
-            comment = "Judgment completed."
-        return JudgeResult(hit=hit, score=score, comment=comment)
+        return BobAction(
+            action="question",
+            text="Is the key factor a deliberate human choice rather than an accident or coincidence?",
+        )
 
     @staticmethod
     def _extract_json_object(text: str) -> str | None:
@@ -146,4 +186,75 @@ class LLMEngine:
         if not match:
             return None
         return match.group(0)
+
+    def _parse_judge_result(self, raw: str) -> JudgeResult | None:
+        json_text = self._extract_json_object(raw)
+        if not json_text:
+            return None
+        try:
+            payload = json.loads(json_text)
+        except json.JSONDecodeError:
+            return None
+        hit = bool(payload.get("hit", False))
+        try:
+            score = int(payload.get("score", 0))
+        except (TypeError, ValueError):
+            return None
+        score = max(0, min(100, score))
+        comment = str(payload.get("comment", ""))
+        if not comment:
+            comment = "Judgment completed."
+        return JudgeResult(hit=hit, score=score, comment=comment)
+
+    @staticmethod
+    def _default_judge_result() -> JudgeResult:
+        return JudgeResult(hit=False, score=40, comment="Close, but key causal links are still missing.")
+
+    def _judge_guess_with_prompt(
+        self,
+        *,
+        bottom: str,
+        guess: str,
+        system_prompt: str,
+        guess_label: str,
+    ) -> JudgeResult:
+        user_prompt = (
+            f"[Ground Truth]\n{bottom}\n\n"
+            f"[{guess_label}]\n{guess}\n\n"
+            "Output JSON only."
+        )
+        retry_temps = [0.2, 0.1, 0.0]
+        for i in range(self.max_retries):
+            prompt = system_prompt
+            if i > 0:
+                prompt = f"{system_prompt}\n{JUDGE_RETRY_SUFFIX}"
+            response = self.client.chat.completions.create(
+                model=self.model,
+                temperature=retry_temps[min(i, len(retry_temps) - 1)],
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
+            raw = (response.choices[0].message.content or "").strip()
+            parsed = self._parse_judge_result(raw)
+            if parsed:
+                return parsed
+        return self._default_judge_result()
+
+    def _parse_bob_action(self, raw: str) -> BobAction | None:
+        json_text = self._extract_json_object(raw)
+        if not json_text:
+            return None
+        try:
+            payload = json.loads(json_text)
+        except json.JSONDecodeError:
+            return None
+        action = str(payload.get("action", "")).strip().lower()
+        text = str(payload.get("text", "")).strip()
+        if action not in {"question", "guess"}:
+            return None
+        if not text:
+            return None
+        return BobAction(action=action, text=text)
     

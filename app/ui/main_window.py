@@ -28,7 +28,7 @@ from app.config import (
 from app.data.story_loader import Story, load_stories
 from app.game.manager import GameSession
 from app.game.state import GameState
-from app.llm.client import JudgeResult, LLMEngine
+from app.llm.client import BobAction, JudgeResult, LLMEngine
 
 UNICODE_ESCAPE_PATTERN = re.compile(r"\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}")
 FONT_SCALE = float(os.getenv("TS_FONT_SCALE", "1.0"))
@@ -156,6 +156,21 @@ class TurtleSoupApp(ctk.CTk):
             pady=12,
         )
         self.menu_bubble.grid(row=0, column=0, sticky="w")
+        self.menu_bob_bubble = ctk.CTkLabel(
+            self.menu_bubble_wrap,
+            text="",
+            font=self.base_font,
+            text_color="#fef3c7",
+            justify="left",
+            wraplength=1020,
+            fg_color="#253044",
+            image=self.pixel_images.get("bob_avatar"),
+            compound="left",
+            corner_radius=8,
+            padx=16,
+            pady=12,
+        )
+        self.menu_bob_bubble.grid(row=1, column=0, sticky="w", pady=(8, 0))
 
         self.menu_action_button = ctk.CTkButton(
             self.menu_screen,
@@ -272,6 +287,7 @@ class TurtleSoupApp(ctk.CTk):
     def _load_pixel_assets(self) -> None:
         self._load_richer_background()
         self._load_pixel_asset("agent_avatar", PIXEL_SPRITES_DIR / "BunnyBoy.png", zoom=4, frame_index=1)
+        self._load_pixel_asset("bob_avatar", PIXEL_SPRITES_DIR / "DuckBoy.png", zoom=4, frame_index=1)
         self._load_pixel_asset("user_avatar", PIXEL_SPRITES_DIR / "CatKid.png", zoom=3, frame_index=1)
         self._load_pixel_asset("system_avatar", PIXEL_SPRITES_DIR / "Fox.png", zoom=4)
         self._load_pixel_asset("button_icon", PIXEL_UI_DIR / "Map-Node.png", zoom=3)
@@ -493,6 +509,10 @@ class TurtleSoupApp(ctk.CTk):
         self.menu_bubble.configure(
             text=_ui_text("Hello, I am Soupie, your story game agent. I'll guide you through this mystery chat.")
         )
+        self.menu_bob_bubble.grid()
+        self.menu_bob_bubble.configure(
+            text=_ui_text("Hello, I'm Bob. I focus on rational elimination questions to test hypotheses and reduce uncertainty.")
+        )
 
     def _go_to_story_layer(self) -> None:
         self.sounds.play("click")
@@ -504,6 +524,7 @@ class TurtleSoupApp(ctk.CTk):
         self.menu_action_button.grid_remove()
         self.story_title_label.grid()
         self.story_list_frame.grid()
+        self.menu_bob_bubble.grid_remove()
         if not self.stories:
             prompt = "No stories are available yet. Please add files under stories/."
         elif first_prompt:
@@ -517,9 +538,7 @@ class TurtleSoupApp(ctk.CTk):
     def _show_game_screen(self) -> None:
         self.game_screen.tkraise()
         self.back_to_menu_button.grid_remove()
-        self.question_entry.configure(state="normal")
-        self.ask_button.configure(state="normal")
-        self.guess_button.configure(state="normal")
+        self._set_player_controls(True)
 
     def _select_story_and_start(self, index: int) -> None:
         self.selected_story_index = index
@@ -550,8 +569,14 @@ class TurtleSoupApp(ctk.CTk):
 
     def on_ask_question(self) -> None:
         self.sounds.play("click")
-        if not self.session.can_ask():
+        if self.session.story is None:
             messagebox.showinfo(_ui_text("Notice"), _ui_text("Please start a story first."))
+            return
+        if self.is_thinking:
+            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please wait for the current reply to finish."))
+            return
+        if not self.session.can_ask():
+            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please wait for Bob to finish his turn."))
             return
         question = self.question_entry.get().strip()
         if not question:
@@ -596,6 +621,161 @@ class TurtleSoupApp(ctk.CTk):
             return
         self.session.add_qa(question, answer)
         self._append_bubble("Soupy", answer, role="agent")
+        if self.session.bob_can_act():
+            self._start_bob_turn()
+        else:
+            self._set_thinking(False)
+
+    def _start_bob_turn(self) -> None:
+        if self.session.story is None or not self.session.bob_can_act():
+            self._finish_bob_turn()
+            return
+        self.session.to_bob_questioning()
+        self._set_player_controls(False)
+        self._set_thinking(True)
+        self.sounds.play("thinking")
+        self.status_label.configure(text=_ui_text("Bob is formulating a rational question..."))
+        request_epoch = self._story_epoch
+
+        def worker() -> None:
+            story = self.session.story
+            if story is None:
+                self.after(
+                    0,
+                    lambda: self._on_worker_error(_ui_text("Current story is unavailable. Please start again."), request_epoch),
+                )
+                return
+            try:
+                action = self.llm.generate_bob_action(surface=story.surface, history=self.session.history)
+            except OpenAIError:
+                self.after(
+                    0,
+                    lambda: self._on_worker_error(
+                        _ui_text("Bob couldn't respond right now. Please retry in a moment."),
+                        request_epoch,
+                    ),
+                )
+                return
+            self.after(0, lambda: self._on_bob_action_ready(action, request_epoch))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_bob_action_ready(self, action: BobAction, request_epoch: int) -> None:
+        if request_epoch != self._story_epoch or self.session.story is None:
+            return
+        if not self.session.bob_can_act():
+            self._finish_bob_turn()
+            return
+
+        if action.action == "question":
+            self._append_bubble("Bob", action.text, role="bob")
+            self.status_label.configure(text=_ui_text("Soupy is answering Bob..."))
+            request_epoch = self._story_epoch
+
+            def worker() -> None:
+                story = self.session.story
+                if story is None:
+                    self.after(
+                        0,
+                        lambda: self._on_worker_error(
+                            _ui_text("Current story is unavailable. Please start again."),
+                            request_epoch,
+                        ),
+                    )
+                    return
+                try:
+                    answer = self.llm.ask_question(
+                        surface=story.surface,
+                        bottom=story.bottom,
+                        question=action.text,
+                        history=self.session.history,
+                    )
+                except OpenAIError:
+                    self.after(
+                        0,
+                        lambda: self._on_worker_error(
+                            _ui_text("Model did not respond. Check local service and retry."),
+                            request_epoch,
+                        ),
+                    )
+                    return
+                self.after(0, lambda: self._on_bob_question_answered(action.text, answer, request_epoch))
+
+            threading.Thread(target=worker, daemon=True).start()
+            return
+
+        self.session.to_bob_guessing()
+        self._append_bubble("Bob", f"Final guess: {action.text}", role="bob")
+        self.status_label.configure(text=_ui_text("Judging Bob's theory..."))
+        request_epoch = self._story_epoch
+
+        def worker() -> None:
+            story = self.session.story
+            if story is None:
+                self.after(
+                    0,
+                    lambda: self._on_worker_error(_ui_text("Current story is unavailable. Please start again."), request_epoch),
+                )
+                return
+            try:
+                result = self.llm.judge_bob_guess(bottom=story.bottom, guess=action.text)
+            except OpenAIError:
+                self.after(
+                    0,
+                    lambda: self._on_worker_error(
+                        _ui_text("Judge is unavailable right now. Please retry in a moment."),
+                        request_epoch,
+                    ),
+                )
+                return
+            self.after(0, lambda: self._on_bob_guess_judged(result, request_epoch))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_bob_question_answered(self, question: str, answer: str, request_epoch: int) -> None:
+        if request_epoch != self._story_epoch or self.session.story is None:
+            return
+        if not self.session.bob_can_act():
+            self._finish_bob_turn()
+            return
+        self.session.add_qa(question, answer)
+        self._append_bubble("Soupy", answer, role="agent")
+        self.status_label.configure(text=_ui_text("Your turn to ask the next question."))
+        self._finish_bob_turn()
+
+    def _on_bob_guess_judged(self, result: JudgeResult, request_epoch: int) -> None:
+        if request_epoch != self._story_epoch or self.session.story is None:
+            return
+        comment = result.comment or "Judgment completed."
+        self._append_bubble("Soupy", f"Bob's theory scored {result.score}/100. {comment}", role="agent")
+
+        if result.hit or result.score >= 80:
+            full_story = self.session.story.bottom
+            self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
+            self.status_label.configure(text=_ui_text("Bob cracked the case!"))
+            self.session.state = GameState.IDLE
+            self.sounds.play("success")
+            self._append_bubble(
+                "Soupy",
+                "Which one would you like to play next? Click Back to Story Menu to continue.",
+                role="agent",
+            )
+            self._set_player_controls(False)
+            self.back_to_menu_button.grid()
+            self._set_thinking(False)
+            return
+
+        self.session.mark_bob_crying()
+        self._append_bubble("Bob", "I'll step back to reassess. Please continue your line of questioning.", role="bob")
+        self.status_label.configure(text=_ui_text("Bob is stepping back to reassess. Your turn."))
+        self.session.to_player_questioning()
+        self._set_player_controls(True)
+        self._set_thinking(False)
+
+    def _finish_bob_turn(self) -> None:
+        if self.session.story is not None:
+            self.session.to_player_questioning()
+        self._set_player_controls(True)
         self._set_thinking(False)
 
     def on_submit_guess(self) -> None:
@@ -603,17 +783,20 @@ class TurtleSoupApp(ctk.CTk):
         if self.session.story is None:
             messagebox.showinfo(_ui_text("Notice"), _ui_text("Please start a story first."))
             return
-        if self.session.state != GameState.QUESTIONING:
+        if self.is_thinking:
+            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please wait for the current reply to finish."))
+            return
+        if self.session.state not in {GameState.QUESTIONING, GameState.BOB_CRYING}:
             messagebox.showinfo(
                 _ui_text("Notice"),
-                _ui_text("You can submit a final theory only while a story is active."),
+                _ui_text("Please wait for Bob to finish his turn before submitting a final theory."),
             )
             return
 
         self.session.to_guessing()
         guess = self._prompt_final_guess()
         if not guess:
-            self.session.state = GameState.QUESTIONING
+            self.session.to_player_questioning()
             return
 
         self._append_bubble("You", f"Final guess: {guess}", role="user")
@@ -649,7 +832,7 @@ class TurtleSoupApp(ctk.CTk):
         verdict = _ui_text("Correct!") if result.hit else _ui_text("Not quite.")
         self._append_bubble("Judge", f"{verdict} (match score {result.score}/100) {result.comment}", role="agent")
         self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
-        if result.hit:
+        if result.hit or result.score >= 80:
             self.status_label.configure(text=_ui_text("Amazing! You solved it."))
             self.session.state = GameState.IDLE
             self.sounds.play("success")
@@ -658,9 +841,7 @@ class TurtleSoupApp(ctk.CTk):
             self.session.state = GameState.IDLE
             self.sounds.play("fail")
         self._append_bubble("Soupy", "Which one would you like to play next? Click Back to Story Menu to continue.", role="agent")
-        self.question_entry.configure(state="disabled")
-        self.ask_button.configure(state="disabled")
-        self.guess_button.configure(state="disabled")
+        self._set_player_controls(False)
         self.back_to_menu_button.grid()
         self._set_thinking(False)
 
@@ -743,6 +924,12 @@ class TurtleSoupApp(ctk.CTk):
         self.wait_window(dialog)
         return result["value"]
 
+    def _set_player_controls(self, enabled: bool) -> None:
+        state = "normal" if enabled else "disabled"
+        self.question_entry.configure(state=state)
+        self.ask_button.configure(state=state)
+        self.guess_button.configure(state=state)
+
     def _set_thinking(self, active: bool) -> None:
         self.is_thinking = active
         if active:
@@ -767,7 +954,8 @@ class TurtleSoupApp(ctk.CTk):
         self._set_thinking(False)
         self._append_bubble("Soupy", message, role="agent")
         if self.session.story is not None:
-            self.session.state = GameState.QUESTIONING
+            self.session.to_player_questioning()
+        self._set_player_controls(True)
 
     def _clear_chat_bubbles(self) -> None:
         for widget in self.chat_stream.winfo_children():
@@ -806,6 +994,21 @@ class TurtleSoupApp(ctk.CTk):
             speaker_color = "#ddd6fe"
             message_color = "#f5f3ff"
             avatar = self.pixel_images.get("system_avatar")
+        elif role == "bob":
+            row_frame = ctk.CTkFrame(self.chat_stream, fg_color="transparent")
+            row_frame.grid_columnconfigure(0, weight=1)
+            row_frame.grid(row=self._chat_row, column=0, sticky="ew", padx=4, pady=6)
+            bubble = ctk.CTkFrame(
+                row_frame,
+                fg_color="#2a3b2f",
+                border_width=2,
+                border_color="#86efac",
+                corner_radius=8,
+            )
+            bubble.grid(row=0, column=0, sticky="w", padx=(0, 130))
+            speaker_color = "#bbf7d0"
+            message_color = "#ecfccb"
+            avatar = self.pixel_images.get("bob_avatar")
         else:
             row_frame = ctk.CTkFrame(self.chat_stream, fg_color="transparent")
             row_frame.grid_columnconfigure(0, weight=1)

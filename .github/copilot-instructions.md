@@ -35,6 +35,7 @@ There is currently no lint/type-check tool configuration (no `ruff`, `flake8`, `
 - `app/data/story_loader.py` loads `stories/*.txt` and parses strict tagged sections: `[Title]`, `[Surface]`, `[Bottom]`.
 - `app/audio/sound_manager.py` initializes `pygame.mixer`, attempts multiple audio drivers/buffer sizes, and degrades to dummy/no-audio mode with user-facing warnings surfaced by the UI.
 - `app/config.py` centralizes runtime paths and env-configurable model settings (`TS_BASE_URL`, `TS_API_KEY`, `TS_MODEL`, `TS_TEMPERATURE`, `TS_CONTEXT_WINDOW`).
+- all art resources are in the folder `PixelPetesArtAssets`; while all sound resources are in the `audio_res`
 
 ## Key conventions (repo-specific)
 
