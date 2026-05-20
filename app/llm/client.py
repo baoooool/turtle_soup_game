@@ -37,7 +37,7 @@ BOB_ACTION_RETRY_SUFFIX = """Your previous output was invalid. Return ONLY stric
 BOB_JUDGE_SYSTEM_PROMPT = """You are Soupie, the Turtle Soup host. Judge Bob's final guess against the canonical answer.
 Output must be valid JSON:
 {"hit": true/false, "score": 0-100, "comment": "short English feedback"}
-If score is below 80, include a brief, professional note about missing evidence or logic gaps."""
+If score is below 60, include a brief, professional note about missing evidence or logic gaps."""
 
 
 @dataclass(slots=True)

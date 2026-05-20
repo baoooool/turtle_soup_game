@@ -42,6 +42,7 @@ MIN_WINDOW_WIDTH = 1180
 MIN_WINDOW_HEIGHT = 720
 STARTUP_CARD_RELWIDTH = 0.9
 STARTUP_SUBTITLE_WRAP = 1240
+FINAL_GUESS_SUCCESS_SCORE = 60
 PIXEL_ASSET_ROOT = PROJECT_ROOT / "PixelPete'sArtAssets" / "PixelPete'sArtAssets"
 PIXEL_UI_DIR = PIXEL_ASSET_ROOT / "Sprites" / "UI"
 PIXEL_SPRITES_DIR = PIXEL_ASSET_ROOT / "Sprites"
@@ -403,7 +404,7 @@ class TurtleSoupApp(ctk.CTk):
         title.pack(padx=24)
         subtitle = ctk.CTkLabel(
             card,
-            text=_ui_text("this is a turtlesoup game developed by owen bao, jacky yang and px"),
+            text=_ui_text("this is a turtlesoup game developed by Owen bao, Jacky yang and Xuan Puu"),
             font=self.status_font,
             text_color="#d8b4fe",
             justify="center",
@@ -583,9 +584,9 @@ class TurtleSoupApp(ctk.CTk):
             return
 
         self.question_entry.delete(0, tk.END)
+        self.sounds.play("thinking")
         self._append_bubble("You", question, role="user")
         self._set_thinking(True)
-        self.sounds.play("thinking")
         request_epoch = self._story_epoch
 
         def worker() -> None:
@@ -631,9 +632,9 @@ class TurtleSoupApp(ctk.CTk):
             self._finish_bob_turn()
             return
         self.session.to_bob_questioning()
+        self.sounds.play("thinking")
         self._set_player_controls(False)
         self._set_thinking(True)
-        self.sounds.play("thinking")
         self.status_label.configure(text=_ui_text("Bob is formulating a rational question..."))
         request_epoch = self._story_epoch
 
@@ -747,14 +748,18 @@ class TurtleSoupApp(ctk.CTk):
         if request_epoch != self._story_epoch or self.session.story is None:
             return
         comment = result.comment or "Judgment completed."
+        success = result.hit or result.score >= FINAL_GUESS_SUCCESS_SCORE
+        if success:
+            self.sounds.play("success")
+        else:
+            self.sounds.play("fail")
         self._append_bubble("Soupy", f"Bob's theory scored {result.score}/100. {comment}", role="agent")
 
-        if result.hit or result.score >= 80:
-            full_story = self.session.story.bottom
-            self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
+        if success:
             self.status_label.configure(text=_ui_text("Bob cracked the case!"))
             self.session.state = GameState.IDLE
-            self.sounds.play("success")
+            full_story = self.session.story.bottom
+            self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
             self._append_bubble(
                 "Soupy",
                 "Which one would you like to play next? Click Back to Story Menu to continue.",
@@ -799,9 +804,9 @@ class TurtleSoupApp(ctk.CTk):
             self.session.to_player_questioning()
             return
 
+        self.sounds.play("thinking")
         self._append_bubble("You", f"Final guess: {guess}", role="user")
         self._set_thinking(True)
-        self.sounds.play("thinking")
         self.status_label.configure(text=_ui_text("Judging your theory..."))
         request_epoch = self._story_epoch
 
@@ -829,17 +834,20 @@ class TurtleSoupApp(ctk.CTk):
         if request_epoch != self._story_epoch or self.session.story is None:
             return
         full_story = self.session.story.bottom
-        verdict = _ui_text("Correct!") if result.hit else _ui_text("Not quite.")
+        success = result.hit or result.score >= FINAL_GUESS_SUCCESS_SCORE
+        verdict = _ui_text("Correct!") if success else _ui_text("Not quite.")
+        if success:
+            self.sounds.play("success")
+        else:
+            self.sounds.play("fail")
         self._append_bubble("Judge", f"{verdict} (match score {result.score}/100) {result.comment}", role="agent")
-        self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
-        if result.hit or result.score >= 80:
+        if success:
             self.status_label.configure(text=_ui_text("Amazing! You solved it."))
             self.session.state = GameState.IDLE
-            self.sounds.play("success")
         else:
             self.status_label.configure(text=_ui_text("Nice try. Full story revealed."))
             self.session.state = GameState.IDLE
-            self.sounds.play("fail")
+        self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
         self._append_bubble("Soupy", "Which one would you like to play next? Click Back to Story Menu to continue.", role="agent")
         self._set_player_controls(False)
         self.back_to_menu_button.grid()
@@ -887,16 +895,27 @@ class TurtleSoupApp(ctk.CTk):
 
         result: dict[str, str | None] = {"value": None}
 
+        def close_dialog() -> None:
+            if not dialog.winfo_exists():
+                return
+            try:
+                dialog.grab_release()
+            except tk.TclError:
+                pass
+            dialog.withdraw()
+            dialog.update_idletasks()
+            dialog.destroy()
+
         def submit() -> None:
             self.sounds.play("click")
             value = guess_box.get("1.0", "end").strip()
             if value:
                 result["value"] = value
-            dialog.destroy()
+            close_dialog()
 
         def cancel() -> None:
             self.sounds.play("click")
-            dialog.destroy()
+            close_dialog()
 
         ctk.CTkButton(
             button_row,
@@ -963,6 +982,7 @@ class TurtleSoupApp(ctk.CTk):
         self._chat_row = 0
 
     def _append_bubble(self, speaker: str, text: str, role: str) -> None:
+        self.sounds.play_message(role)
         is_user = role == "user"
         if is_user:
             row_frame = ctk.CTkFrame(self.chat_stream, fg_color="transparent")
@@ -1045,7 +1065,6 @@ class TurtleSoupApp(ctk.CTk):
             text_color=message_color,
             font=self.base_font,
         ).pack(padx=14, pady=(0, 10), fill="x")
-        self.sounds.play_message(role)
         self._chat_row += 1
 
         canvas = getattr(self.chat_stream, "_parent_canvas", None)

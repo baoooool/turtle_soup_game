@@ -108,8 +108,8 @@ class SoundManager:
         self._try_load("message_agent", switch_audio / "rollover5.ogg")
         self._try_load("message_system", switch_audio / "rollover3.ogg")
         self._try_load("message_bob", switch_audio / "rollover6.ogg")
-        self._try_load("success", self.audio_dir / "8-Bit jingles" / "jingles_NES10.ogg")
-        self._try_load("fail", self.audio_dir / "Hit jingles" / "jingles_HIT11.ogg")
+        self._try_load("success", self.audio_dir / "8-Bit jingles" / "jingles_NES03.ogg")
+        self._try_load("fail", self.audio_dir / "Hit jingles" / "jingles_HIT15.ogg")
         self._try_load("startup", self.audio_dir / "Steel jingles" / "jingles_STEEL00.ogg")
         if "message_agent" in self.sounds:
             self.sounds["reply"] = self.sounds["message_agent"]
