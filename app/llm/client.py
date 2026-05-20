@@ -8,6 +8,9 @@ from openai import OpenAI
 from app.game.manager import QAItem
 
 QUESTION_SYSTEM_PROMPT = """You are a Turtle Soup game host.
+Answer strictly based on the ground truth. Do NOT invent facts.
+If the question is not determined by the ground truth, answer "Irrelevant".
+If the question contradicts the ground truth, answer "No".
 You must choose exactly one final answer with no explanation:
 1) Yes
 2) No
@@ -16,10 +19,26 @@ You must choose exactly one final answer with no explanation:
 
 QUESTION_RETRY_SUFFIX = """Strictly follow this: output only one of "Yes" / "No" / "Irrelevant", with no punctuation or extra text."""
 
-JUDGE_SYSTEM_PROMPT = """You are a Turtle Soup judge. Compare the canonical answer and player's final guess.
-Output must be valid JSON in this format:
-{"hit": true/false, "score": 0-100, "comment": "short English feedback"}
-"""
+JUDGE_SYSTEM_PROMPT = """You are a rigorous but fair Turtle Soup final judge. Evaluate the player's final guess against the canonical answer.
+Avoid sympathy points and keyword-spotting, but do not be overly harsh. Fully interpret the guess and check whether the core causal logic matches.
+
+Mandatory evaluation:
+1) Extract the canonical core chain (cause -> mechanism -> outcome) and indispensable key details that explain the anomalies.
+2) Compare the player's causal chain; verify they inferred the reason and mechanism, not just the outcome.
+3) Validate that the key anomalous actions/props are explained in the guess.
+
+Scoring rubric (balanced):
+- Core logic chain (60 pts): fully correct 50-60; partially correct 25-45; wrong 0-24.
+- Key details (40 pts): all key anomalies explained 30-40; missing a key detail deduct 10-15 each.
+
+Soft caps (use judgment, not absolute):
+- If core logic is wrong, generally keep the score <= 50.
+- If core logic is correct but key anomalies are missing, generally keep the score <= 75.
+- If the guess is just keyword listing without coherent causality, generally keep the score <= 30.
+
+hit=true only if the core explanation and causal chain match.
+Output must be valid JSON:
+{"hit": true/false, "score": 0-100, "comment": "short English feedback"}"""
 
 JUDGE_RETRY_SUFFIX = """Your previous output was invalid. Output ONLY a single JSON object in the exact schema, no markdown, no extra text."""
 
@@ -35,6 +54,23 @@ No extra keys. No markdown. No commentary."""
 BOB_ACTION_RETRY_SUFFIX = """Your previous output was invalid. Return ONLY strict JSON with keys action and text. No extra text."""
 
 BOB_JUDGE_SYSTEM_PROMPT = """You are Soupie, the Turtle Soup host. Judge Bob's final guess against the canonical answer.
+Be logical and fair; avoid sympathy points but do not be overly harsh. Fully interpret the guess and check core causal logic plus key anomalies.
+
+Mandatory evaluation:
+1) Extract the canonical core chain (cause -> mechanism -> outcome) and indispensable key details.
+2) Compare Bob's causal chain; verify he inferred the reason and mechanism, not just the outcome.
+3) Validate that key anomalous actions/props are explained.
+
+Scoring rubric (balanced):
+- Core logic chain (60 pts): fully correct 50-60; partially correct 25-45; wrong 0-24.
+- Key details (40 pts): all key anomalies explained 30-40; missing a key detail deduct 10-15 each.
+
+Soft caps (use judgment, not absolute):
+- If core logic is wrong, generally keep the score <= 50.
+- If core logic is correct but key anomalies are missing, generally keep the score <= 75.
+- If the guess is just keyword listing without coherent causality, generally keep the score <= 30.
+
+hit=true only if the core explanation and causal chain match.
 Output must be valid JSON:
 {"hit": true/false, "score": 0-100, "comment": "short English feedback"}
 If score is below 60, include a brief, professional note about missing evidence or logic gaps."""

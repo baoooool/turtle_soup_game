@@ -198,18 +198,49 @@ class TurtleSoupApp(ctk.CTk):
         self.game_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
         self.game_screen.grid(row=0, column=0, sticky="nsew")
         self.game_screen.grid_columnconfigure(0, weight=1)
-        self.game_screen.grid_rowconfigure(0, weight=1)
+        self.game_screen.grid_rowconfigure(1, weight=1)
+
+        self.story_header = ctk.CTkFrame(
+            self.game_screen,
+            fg_color="#2b2046",
+            border_width=2,
+            border_color="#7c3aed",
+            corner_radius=10,
+        )
+        self.story_header.grid(row=0, column=0, padx=12, pady=(10, 6), sticky="ew")
+        self.story_header.grid_columnconfigure(0, weight=1)
+        self.story_header_title = ctk.CTkLabel(
+            self.story_header,
+            text=_ui_text("Story Surface"),
+            font=self.status_font,
+            text_color="#fef3c7",
+            image=self.pixel_images.get("agent_avatar"),
+            compound="left",
+            anchor="w",
+        )
+        self.story_header_title.grid(row=0, column=0, padx=16, pady=(10, 4), sticky="w")
+        self.story_header_text = ctk.CTkLabel(
+            self.story_header,
+            text=_ui_text("Choose a story to see the surface here."),
+            font=self.base_font,
+            text_color="#f8fafc",
+            justify="left",
+            wraplength=1160,
+            anchor="w",
+        )
+        self.story_header_text.grid(row=1, column=0, padx=16, pady=(0, 12), sticky="w")
 
         self.chat_stream = ctk.CTkScrollableFrame(self.game_screen)
-        self.chat_stream.grid(row=0, column=0, padx=12, pady=(8, 6), sticky="nsew")
+        self.chat_stream.grid(row=1, column=0, padx=12, pady=(6, 6), sticky="nsew")
         self.chat_stream.grid_columnconfigure(0, weight=1)
         self.chat_stream.configure(fg_color="#17142a")
+        self._bind_chat_scroll()
 
         self.thinking_label = ctk.CTkLabel(self.game_screen, text="", font=self.status_font, text_color="#60a5fa")
-        self.thinking_label.grid(row=1, column=0, padx=16, pady=(0, 8), sticky="w")
+        self.thinking_label.grid(row=2, column=0, padx=16, pady=(0, 8), sticky="w")
 
         self.action_row = ctk.CTkFrame(self.game_screen, fg_color="transparent")
-        self.action_row.grid(row=2, column=0, padx=16, pady=(0, 16), sticky="ew")
+        self.action_row.grid(row=3, column=0, padx=16, pady=(0, 16), sticky="ew")
         self.action_row.grid_columnconfigure(0, weight=1)
 
         self.question_entry = ctk.CTkEntry(
@@ -404,7 +435,7 @@ class TurtleSoupApp(ctk.CTk):
         title.pack(padx=24)
         subtitle = ctk.CTkLabel(
             card,
-            text=_ui_text("this is a turtlesoup game developed by Owen bao, Jacky yang and Xuan Puu"),
+            text=_ui_text("this is a turtlesoup game developed by Owen Bao, Jacky Yang and Xuan Puu"),
             font=self.status_font,
             text_color="#d8b4fe",
             justify="center",
@@ -554,8 +585,12 @@ class TurtleSoupApp(ctk.CTk):
         self.session.start_story(story)
         self._story_epoch += 1
         self._clear_chat_bubbles()
-        self._append_bubble("Soupy", f"Story setup: {story.surface}", role="agent")
-        self._append_bubble("Soupy", "Ask your questions anytime. I will reply with only: Yes / No / Irrelevant.", role="agent")
+        self._set_story_header(story)
+        self._append_bubble(
+            "Soupy",
+            "Story surface is pinned above. Ask your questions anytime. I will reply with only: Yes / No / Irrelevant.",
+            role="agent",
+        )
         self.status_label.configure(text=_ui_text(f"Now playing: {story.title}"))
         self._show_game_screen()
 
@@ -565,6 +600,10 @@ class TurtleSoupApp(ctk.CTk):
         self._story_epoch += 1
         self._set_thinking(False)
         self.question_entry.delete(0, tk.END)
+        self._clear_chat_bubbles()
+        self._set_story_header(None)
+        self.selected_story_index = None
+        self.back_to_menu_button.grid_remove()
         self.status_label.configure(text=_ui_text("New round ready"))
         self._show_menu_layer_two(first_prompt=False)
 
@@ -957,6 +996,45 @@ class TurtleSoupApp(ctk.CTk):
         else:
             self.thinking_label.configure(text="")
 
+    def _bind_chat_scroll(self) -> None:
+        canvas = getattr(self.chat_stream, "_parent_canvas", None)
+        if canvas is None:
+            return
+
+        def is_descendant(widget: tk.Widget | None, parent: tk.Widget) -> bool:
+            current = widget
+            while current is not None:
+                if current == parent:
+                    return True
+                current = current.master
+            return False
+
+        def on_mousewheel(event: tk.Event) -> None:
+            if not is_descendant(event.widget, self.chat_stream):
+                return
+            if event.delta:
+                step = int(-1 * (event.delta / 120))
+                if step == 0:
+                    step = -1 if event.delta > 0 else 1
+                canvas.yview_scroll(step, "units")
+                return
+            if getattr(event, "num", None) == 4:
+                canvas.yview_scroll(-3, "units")
+            elif getattr(event, "num", None) == 5:
+                canvas.yview_scroll(3, "units")
+
+        self.bind_all("<MouseWheel>", on_mousewheel, add="+")
+        self.bind_all("<Button-4>", on_mousewheel, add="+")
+        self.bind_all("<Button-5>", on_mousewheel, add="+")
+
+    def _set_story_header(self, story: Story | None) -> None:
+        if story is None:
+            self.story_header_title.configure(text=_ui_text("Story Surface"))
+            self.story_header_text.configure(text=_ui_text("Choose a story to see the surface here."))
+            return
+        self.story_header_title.configure(text=_ui_text(f"Story Surface · {story.title}"))
+        self.story_header_text.configure(text=_ui_text(story.surface))
+
     def _animate_thinking(self) -> None:
         if not self.is_thinking:
             return
@@ -980,6 +1058,24 @@ class TurtleSoupApp(ctk.CTk):
         for widget in self.chat_stream.winfo_children():
             widget.destroy()
         self._chat_row = 0
+        self._reset_chat_scroll()
+
+    def _reset_chat_scroll(self) -> None:
+        canvas = getattr(self.chat_stream, "_parent_canvas", None)
+        if canvas is None:
+            return
+        canvas.configure(scrollregion=(0, 0, 0, 0))
+        canvas.yview_moveto(0.0)
+
+    def _scroll_chat_to_bottom(self) -> None:
+        canvas = getattr(self.chat_stream, "_parent_canvas", None)
+        if canvas is None:
+            return
+        canvas.update_idletasks()
+        bbox = canvas.bbox("all")
+        if bbox is not None:
+            canvas.configure(scrollregion=bbox)
+        canvas.yview_moveto(1.0)
 
     def _append_bubble(self, speaker: str, text: str, role: str) -> None:
         self.sounds.play_message(role)
@@ -1069,4 +1165,4 @@ class TurtleSoupApp(ctk.CTk):
 
         canvas = getattr(self.chat_stream, "_parent_canvas", None)
         if canvas is not None:
-            self.after(20, lambda: canvas.yview_moveto(1.0))
+            self.after(20, self._scroll_chat_to_bottom)
