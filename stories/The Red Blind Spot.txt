@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 The Red Blind Spot
 
-[Surface]
+[Surface_en]
 A man watches TV news about a serial killer on the run. After the report, he closes the curtains and, in despair, kills himself.
 
-[Bottom]
+[Bottom_en]
 The man is color-blind, with red and green reversed in his perception. The news showed the killer's taunting message written in the victim's red blood, and the host said it was red. On screen he saw green letters. When he went to the window, he noticed "green" stains on his handkerchief and carpet, realizing they were actually blood from his own sleepwalking murders. He understood he was the killer.
+
+[Title_zh]
+红色盲点
+
+[Surface_zh]
+一个男人在电视新闻上看到关于一名在逃连环杀手的报道。报道结束后，他拉上窗帘，绝望地自杀了。
+
+[Bottom_zh]
+这个男人是色盲，他的红绿色觉是颠倒的。新闻中展示了凶手用受害者鲜血写下的挑衅信息，主持人说那是红色的。他在屏幕上看到的是绿色的字。当他走到窗前时，他注意到手帕和地毯上有"绿色"的污渍，意识到那其实是他自己梦游杀人时留下的血迹。他明白了自己就是那个凶手。

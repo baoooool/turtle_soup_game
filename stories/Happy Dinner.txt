@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 Happy Dinner
 
-[Surface]
+[Surface_en]
 A family is happily eating dinner. The father answers a phone call, turns pale and sweaty, and stares at his wife and son who are eating meat.
 
-[Bottom]
+[Bottom_en]
 Days earlier, the family was caught in an avalanche while climbing a snowy mountain, and the father was separated. He survived and came home to find his wife and son waiting with a meal, believing they had also returned safely. Then the rescue team called: "We just found your wife and son's bodies in a snow pit." So who are the people eating across from him?
+
+[Title_zh]
+快乐的晚餐
+
+[Surface_zh]
+一家人正在愉快地吃晚餐。父亲接了一个电话，脸色苍白、满头大汗，盯着正在吃肉
+
+[Bottom_zh]
+几天前，一家人在雪山上登山时遭遇雪崩，父亲与家人走散。他幸存下来回到家，发现妻子和儿子正在等他吃饭，以为他们也安全回来了。然后救援队打来电话："我们刚刚在雪坑里找到了你妻子和儿子的尸体。"那么坐在他对面吃饭的是谁？

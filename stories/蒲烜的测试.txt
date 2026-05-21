@@ -1,0 +1,17 @@
+[Title_zh]
+蒲烜的测试
+
+[Surface_zh]
+蒲烜想测试这个故事
+
+[Bottom_zh]
+因为这个故事需要被测试
+
+[Title_en]
+Puxuan's Test
+
+[Surface_en]
+Puxuan wanted to test this story.
+
+[Bottom_en]
+Because the story needed to be tested.

@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 Ice Water and Poison
 
-[Surface]
+[Surface_en]
 Two men walk into a bar and order two identical glasses of iced whiskey. Man A drinks quickly and leaves; Man B sips slowly and dies of poisoning halfway through. The toxin dose in both drinks is identical. Why was A fine?
 
-[Bottom]
+[Bottom_en]
 The poison was in the ice, not the whiskey. A finished before the ice melted, so he never ingested the toxin. B drank slowly, allowing the ice to melt and release the poison into the drink.
+
+[Title_zh]
+冰水与毒药
+
+[Surface_zh]
+两个男人走进酒吧，点了两杯相同的冰威士忌。男人A喝得很快然后离开了；男人B慢慢啜饮，喝到一半时中毒身亡。两杯饮料中的毒素剂量相同。为什么A没事？
+
+[Bottom_zh]
+毒药在冰块里，不在威士忌里。A在冰块融化前就喝完了，所以他从未摄入毒素。B喝得很慢，冰块融化后将毒药释放到饮料中。

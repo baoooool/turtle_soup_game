@@ -6,74 +6,16 @@ from typing import Literal
 from openai import OpenAI
 
 from app.game.manager import QAItem
-
-QUESTION_SYSTEM_PROMPT = """You are a Turtle Soup game host.
-Answer strictly based on the ground truth. Do NOT invent facts.
-If the question is not determined by the ground truth, answer "Irrelevant".
-If the question contradicts the ground truth, answer "No".
-You must choose exactly one final answer with no explanation:
-1) Yes
-2) No
-3) Irrelevant
-"""
-
-QUESTION_RETRY_SUFFIX = """Strictly follow this: output only one of "Yes" / "No" / "Irrelevant", with no punctuation or extra text."""
-
-JUDGE_SYSTEM_PROMPT = """You are a rigorous but fair Turtle Soup final judge. Evaluate the player's final guess against the canonical answer.
-Avoid sympathy points and keyword-spotting, but do not be overly harsh. Fully interpret the guess and check whether the core causal logic matches.
-
-Mandatory evaluation:
-1) Extract the canonical core chain (cause -> mechanism -> outcome) and indispensable key details that explain the anomalies.
-2) Compare the player's causal chain; verify they inferred the reason and mechanism, not just the outcome.
-3) Validate that the key anomalous actions/props are explained in the guess.
-
-Scoring rubric (balanced):
-- Core logic chain (60 pts): fully correct 50-60; partially correct 25-45; wrong 0-24.
-- Key details (40 pts): all key anomalies explained 30-40; missing a key detail deduct 10-15 each.
-
-Soft caps (use judgment, not absolute):
-- If core logic is wrong, generally keep the score <= 50.
-- If core logic is correct but key anomalies are missing, generally keep the score <= 75.
-- If the guess is just keyword listing without coherent causality, generally keep the score <= 30.
-
-hit=true only if the core explanation and causal chain match.
-Output must be valid JSON:
-{"hit": true/false, "score": 0-100, "comment": "short English feedback"}"""
-
-JUDGE_RETRY_SUFFIX = """Your previous output was invalid. Output ONLY a single JSON object in the exact schema, no markdown, no extra text."""
-
-BOB_SYSTEM_PROMPT = """You MUST act as a calm, rational, and analytical player named Bob in a Turtle Soup game.
-Your purpose is to help the human player eliminate wrong assumptions by asking precise, closed yes/no questions.
-Focus on evidence-driven reasoning, avoid unfounded speculation, and keep questions concise and logical.
-Only decide to guess when you have a coherent, testable hypothesis that aligns with the known answers.
-Output STRICT JSON only in one of these formats:
-{"action": "question", "text": "a yes/no/irrelevant question"}
-{"action": "guess", "text": "a concise final theory"}
-No extra keys. No markdown. No commentary."""
-
-BOB_ACTION_RETRY_SUFFIX = """Your previous output was invalid. Return ONLY strict JSON with keys action and text. No extra text."""
-
-BOB_JUDGE_SYSTEM_PROMPT = """You are Soupie, the Turtle Soup host. Judge Bob's final guess against the canonical answer.
-Be logical and fair; avoid sympathy points but do not be overly harsh. Fully interpret the guess and check core causal logic plus key anomalies.
-
-Mandatory evaluation:
-1) Extract the canonical core chain (cause -> mechanism -> outcome) and indispensable key details.
-2) Compare Bob's causal chain; verify he inferred the reason and mechanism, not just the outcome.
-3) Validate that key anomalous actions/props are explained.
-
-Scoring rubric (balanced):
-- Core logic chain (60 pts): fully correct 50-60; partially correct 25-45; wrong 0-24.
-- Key details (40 pts): all key anomalies explained 30-40; missing a key detail deduct 10-15 each.
-
-Soft caps (use judgment, not absolute):
-- If core logic is wrong, generally keep the score <= 50.
-- If core logic is correct but key anomalies are missing, generally keep the score <= 75.
-- If the guess is just keyword listing without coherent causality, generally keep the score <= 30.
-
-hit=true only if the core explanation and causal chain match.
-Output must be valid JSON:
-{"hit": true/false, "score": 0-100, "comment": "short English feedback"}
-If score is below 60, include a brief, professional note about missing evidence or logic gaps."""
+from app.i18n import (
+    BOB_ACTION_RETRY_SUFFIX,
+    BOB_JUDGE_SYSTEM_PROMPT,
+    BOB_SYSTEM_PROMPT,
+    JUDGE_RETRY_SUFFIX,
+    JUDGE_SYSTEM_PROMPT,
+    QUESTION_RETRY_SUFFIX,
+    QUESTION_SYSTEM_PROMPT,
+)
+from app.i18n import UI
 
 
 @dataclass(slots=True)
@@ -141,11 +83,11 @@ class LLMEngine:
     ) -> str:
         context_block = self._build_context_lines(history)
         user_prompt = (
-            f"[Surface]\n{surface}\n\n"
-            f"[History]\n{context_block}\n\n"
-            f"[Ground Truth (do not reveal)]\n{bottom}\n\n"
-            f"[Player Question]\n{question}\n\n"
-            "Return only: Yes / No / Irrelevant."
+            f"[{UI['prompt_surface']}]\n{surface}\n\n"
+            f"[{UI['prompt_history']}]\n{context_block}\n\n"
+            f"[{UI['prompt_bottom']}]\n{bottom}\n\n"
+            f"[{UI['prompt_question']}]\n{question}\n\n"
+            f"{UI['prompt_return']}"
         )
 
         retry_temps = [self.temperature, max(0.0, self.temperature - 0.1), 0.0]
@@ -188,9 +130,9 @@ class LLMEngine:
     def generate_bob_action(self, *, surface: str, history: list[QAItem]) -> BobAction:
         context_block = self._build_context_lines(history)
         user_prompt = (
-            f"[Surface]\n{surface}\n\n"
-            f"[History]\n{context_block}\n\n"
-            "Output JSON only."
+            f"[{UI['prompt_surface']}]\n{surface}\n\n"
+            f"[{UI['prompt_history']}]\n{context_block}\n\n"
+            f"{UI['prompt_json_only']}"
         )
 
         retry_temps = [self.temperature, max(0.0, self.temperature - 0.1), 0.0]
@@ -255,9 +197,9 @@ class LLMEngine:
         guess_label: str,
     ) -> JudgeResult:
         user_prompt = (
-            f"[Ground Truth]\n{bottom}\n\n"
+            f"[{UI['prompt_bottom_label']}]\n{bottom}\n\n"
             f"[{guess_label}]\n{guess}\n\n"
-            "Output JSON only."
+            f"{UI['prompt_json_only']}"
         )
         retry_temps = [0.2, 0.1, 0.0]
         for i in range(self.max_retries):

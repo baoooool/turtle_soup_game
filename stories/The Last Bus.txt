@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 The Last Bus
 
-[Surface]
+[Surface_en]
 Late at night, a little girl boards the last bus. The bus is full of passengers, but at the next stop she suddenly bolts off and immediately calls the police.
 
-[Bottom]
+[Bottom_en]
 After boarding, she notices the bus is unnaturally quiet. Looking closely, she sees the passengers sitting rigidly with pale faces and empty eyes. Worst of all, each neck is tied to a nearly transparent fishing line leading to the ceiling. Everyone except her and the driver is a corpse from a recent murder, and the driver is puppeteering them.
+
+[Title_zh]
+末班车
+
+[Surface_zh]
+深夜，一个小女孩上了最后一班公交车。车上坐满了乘客，但在下一站她突然冲下车，立刻报了警。
+
+[Bottom_zh]
+上车后，她注意到公交车异常安静。仔细一看，她发现乘客们僵硬地坐着，脸色苍白，眼神空洞。最可怕的是，每个人的脖子上都系着一根几乎透明的鱼线，连到天花板上。除了她和司机，所有人都是最近谋杀案的尸体，司机在操纵着他们。
