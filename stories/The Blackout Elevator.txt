@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 The Blackout Elevator
 
-[Surface]
+[Surface_en]
 A man is riding an elevator down when the power suddenly goes out and the car gets stuck. He does not panic, but checks the time on his phone and then breaks down crying.
 
-[Bottom]
+[Bottom_en]
 His wife is in the hospital on a ventilator. The doctor warned that a storm might cause a brief outage, but the backup generators would last about 30 minutes. He was on his way to get a special medicine for her. When the elevator lost power, he checked his phone and saw that an hour had passed and the elevator was still not fixed. He cried because her ventilator had already stopped and she had died.
+
+[Title_zh]
+停电的电梯
+
+[Surface_zh]
+一个男人正在坐电梯下楼，突然停电，电梯卡住了。他没有惊慌，而是看了看手机上的时间，然后崩溃大哭。
+
+[Bottom_zh]
+他的妻子在医院用呼吸机维持生命。医生警告说暴风雨可能会导致短暂停电，但备用发电机可以支撑约30分钟。他正赶去为她取一种特殊药物。当电梯停电时，他看了看手机，发现已经过去了一个小时，电梯还没修好。他哭了，因为妻子的呼吸机已经停了，她已经去世了。

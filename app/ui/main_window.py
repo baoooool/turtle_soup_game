@@ -28,9 +28,9 @@ from app.config import (
 from app.data.story_loader import Story, load_stories
 from app.game.manager import GameSession
 from app.game.state import GameState
+from app.i18n import LANGUAGE, UI
 from app.llm.client import BobAction, JudgeResult, LLMEngine
 
-UNICODE_ESCAPE_PATTERN = re.compile(r"\\u[0-9a-fA-F]{4}|\\U[0-9a-fA-F]{8}")
 FONT_SCALE = float(os.getenv("TS_FONT_SCALE", "1.0"))
 BASE_FONT_SIZE = max(24, int(42 * FONT_SCALE))
 STATUS_FONT_SIZE = max(20, int(34 * FONT_SCALE))
@@ -49,17 +49,6 @@ PIXEL_SPRITES_DIR = PIXEL_ASSET_ROOT / "Sprites"
 PIXEL_GB_DIR = PIXEL_ASSET_ROOT / "GameBoy"
 
 
-def _ui_text(text: str) -> str:
-    if "\\" not in text:
-        return text
-
-    def replace(match: re.Match[str]) -> str:
-        token = match.group(0)
-        return chr(int(token[2:], 16))
-
-    return UNICODE_ESCAPE_PATTERN.sub(replace, text)
-
-
 class TurtleSoupApp(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
@@ -68,7 +57,7 @@ class TurtleSoupApp(ctk.CTk):
         ctk.set_widget_scaling(UI_SCALE)
         ctk.set_window_scaling(UI_SCALE)
 
-        self.title(_ui_text("Turtle Soup · Story Night"))
+        self.title(UI["startup_title"] + " · Story Night")
         self.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
         self.minsize(MIN_WINDOW_WIDTH, MIN_WINDOW_HEIGHT)
         self.configure(fg_color="#151022")
@@ -122,13 +111,37 @@ class TurtleSoupApp(ctk.CTk):
 
         self.status_label = ctk.CTkLabel(
             self.main_panel,
-            text=_ui_text("Getting things ready..."),
+            text=UI["boot_preparing"],
             font=self.status_font,
             text_color="#c7d2fe",
             image=self.pixel_images.get("system_avatar"),
             compound="left",
         )
         self.status_label.grid(row=0, column=0, padx=24, pady=(20, 8), sticky="w")
+
+        self.lang_toggle_button = ctk.CTkButton(
+            self.main_panel,
+            text=UI["lang_toggle"],
+            command=self._toggle_language,
+            font=ctk.CTkFont(family="helvetica" if "helvetica" in tkfont.families() else "fixed", size=14),
+            width=100,
+            height=36,
+            fg_color="#4c1d95",
+            hover_color="#6d28d9",
+            border_width=2,
+            border_color="#a78bfa",
+            corner_radius=8,
+            text_color="#fef3c7",
+        )
+        self.lang_toggle_button.grid(row=0, column=1, padx=24, pady=(20, 8), sticky="e")
+
+        self.lang_label = ctk.CTkLabel(
+            self.main_panel,
+            text=UI["lang_label"],
+            font=ctk.CTkFont(family="helvetica" if "helvetica" in tkfont.families() else "fixed", size=14),
+            text_color="#c7d2fe",
+        )
+        self.lang_label.grid(row=0, column=2, padx=(0, 8), pady=(20, 8), sticky="e")
 
         self.screen_stack = ctk.CTkFrame(self.main_panel, fg_color="transparent")
         self.screen_stack.grid(row=1, column=0, padx=20, pady=8, sticky="nsew")
@@ -175,7 +188,7 @@ class TurtleSoupApp(ctk.CTk):
 
         self.menu_action_button = ctk.CTkButton(
             self.menu_screen,
-            text=_ui_text("Nice to meet you"),
+            text=UI["menu_greeting"],
             command=self._go_to_story_layer,
             font=self.base_font,
             image=self.pixel_images.get("button_icon"),
@@ -186,14 +199,68 @@ class TurtleSoupApp(ctk.CTk):
 
         self.story_title_label = ctk.CTkLabel(
             self.menu_screen,
-            text=_ui_text("Choose Your Story"),
+            text=UI["menu_choose"],
             font=self.title_font,
         )
         self.story_title_label.grid(row=2, column=0, padx=24, pady=(2, 8), sticky="w")
 
         self.story_list_frame = ctk.CTkScrollableFrame(self.menu_screen, width=900)
-        self.story_list_frame.grid(row=3, column=0, padx=24, pady=(0, 20), sticky="nsew")
+        self.story_list_frame.grid(row=3, column=0, padx=24, pady=(0, 8), sticky="nsew")
         self.story_list_frame.configure(fg_color="#2b2046")
+
+        self.story_manage_button = ctk.CTkButton(
+            self.menu_screen,
+            text=UI["story_management_title"],
+            command=self._open_story_management,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
+        )
+        self.story_manage_button.grid(row=4, column=0, padx=24, pady=(8, 20), sticky="w")
+
+        # Story management screen
+        self.story_manage_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
+        self.story_manage_screen.grid(row=0, column=0, sticky="nsew")
+        self.story_manage_screen.grid_columnconfigure(0, weight=1)
+        self.story_manage_screen.grid_rowconfigure(1, weight=1)
+
+        self.story_manage_header = ctk.CTkLabel(
+            self.story_manage_screen,
+            text=UI["story_management_title"],
+            font=self.title_font,
+            text_color="#fef3c7",
+        )
+        self.story_manage_header.grid(row=0, column=0, padx=24, pady=(20, 10), sticky="w")
+
+        self.story_manage_list_frame = ctk.CTkScrollableFrame(self.story_manage_screen, width=900)
+        self.story_manage_list_frame.grid(row=1, column=0, padx=24, pady=(0, 10), sticky="nsew")
+        self.story_manage_list_frame.configure(fg_color="#2b2046")
+
+        self.story_manage_bottom = ctk.CTkFrame(self.story_manage_screen, fg_color="transparent")
+        self.story_manage_bottom.grid(row=2, column=0, padx=24, pady=(10, 20), sticky="w")
+
+        self.story_manage_back_button = ctk.CTkButton(
+            self.story_manage_bottom,
+            text=UI["story_management_back"],
+            command=self._back_to_menu,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
+        )
+        self.story_manage_back_button.pack(side="left")
+
+        self.story_manage_add_button = ctk.CTkButton(
+            self.story_manage_bottom,
+            text=UI["story_management_add"],
+            command=self._open_custom_story_dialog_from_manage,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=True),
+        )
+        self.story_manage_add_button.pack(side="left", padx=(12, 0))
 
         self.game_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
         self.game_screen.grid(row=0, column=0, sticky="nsew")
@@ -211,7 +278,7 @@ class TurtleSoupApp(ctk.CTk):
         self.story_header.grid_columnconfigure(0, weight=1)
         self.story_header_title = ctk.CTkLabel(
             self.story_header,
-            text=_ui_text("Story Surface"),
+            text=UI["game_story_surface"],
             font=self.status_font,
             text_color="#fef3c7",
             image=self.pixel_images.get("agent_avatar"),
@@ -221,7 +288,7 @@ class TurtleSoupApp(ctk.CTk):
         self.story_header_title.grid(row=0, column=0, padx=16, pady=(10, 4), sticky="w")
         self.story_header_text = ctk.CTkLabel(
             self.story_header,
-            text=_ui_text("Choose a story to see the surface here."),
+            text=UI["game_story_header_empty"],
             font=self.base_font,
             text_color="#f8fafc",
             justify="left",
@@ -245,7 +312,7 @@ class TurtleSoupApp(ctk.CTk):
 
         self.question_entry = ctk.CTkEntry(
             self.action_row,
-            placeholder_text=_ui_text("Ask anything to uncover the truth..."),
+            placeholder_text=UI["game_question_placeholder"],
             font=self.base_font,
             fg_color="#140f25",
             border_width=2,
@@ -257,7 +324,7 @@ class TurtleSoupApp(ctk.CTk):
 
         self.ask_button = ctk.CTkButton(
             self.action_row,
-            text=_ui_text("Send"),
+            text=UI["game_send"],
             width=110,
             command=self.on_ask_question,
             font=self.base_font,
@@ -269,7 +336,7 @@ class TurtleSoupApp(ctk.CTk):
 
         self.guess_button = ctk.CTkButton(
             self.action_row,
-            text=_ui_text("Final Guess"),
+            text=UI["game_final_guess"],
             width=170,
             command=self.on_submit_guess,
             font=self.base_font,
@@ -281,7 +348,7 @@ class TurtleSoupApp(ctk.CTk):
 
         self.back_to_menu_button = ctk.CTkButton(
             self.action_row,
-            text=_ui_text("Back to Story Menu"),
+            text=UI["game_back_to_menu"],
             command=self.on_reset,
             font=self.base_font,
             image=self.pixel_images.get("button_icon"),
@@ -315,6 +382,20 @@ class TurtleSoupApp(ctk.CTk):
             "corner_radius": 6,
             "text_color": "#f8fafc",
         }
+
+    def _toggle_language(self) -> None:
+        self.sounds.play("click")
+        new_lang = "en" if LANGUAGE == "zh" else "zh"
+        messagebox.showinfo(
+            UI["dialog_notice"],
+            UI["lang_restart_notice"].format(lang=new_lang),
+        )
+        import os
+        os.environ["TS_LANGUAGE"] = new_lang
+        self.destroy()
+        import subprocess
+        import sys
+        subprocess.Popen([sys.executable, sys.argv[0]])
 
     def _load_pixel_assets(self) -> None:
         self._load_richer_background()
@@ -390,13 +471,13 @@ class TurtleSoupApp(ctk.CTk):
         return image.crop((left, 0, right, image.height))
 
     def _load_boot_sequence(self) -> None:
-        self.status_label.configure(text=_ui_text("Loading stories and sounds..."))
+        self.status_label.configure(text=UI["boot_loading"])
         self._start_startup_sequence()
         self.after(200, self._boot_async)
 
     def _boot_async(self) -> None:
         def worker() -> None:
-            self.stories = load_stories(STORIES_DIR)
+            self.stories = [s.get_localized(LANGUAGE) for s in load_stories(STORIES_DIR)]
             try:
                 self.sounds.initialize()
             except pygame.error:
@@ -412,9 +493,9 @@ class TurtleSoupApp(ctk.CTk):
         self.boot_progress.grid_remove()
         self._render_story_buttons()
         if self.stories:
-            self.status_label.configure(text=_ui_text(f"Ready! {len(self.stories)} stories loaded."))
+            self.status_label.configure(text=UI["boot_ready"].format(count=len(self.stories)))
         else:
-            self.status_label.configure(text=_ui_text("No stories found yet. Add a .txt story under stories/."))
+            self.status_label.configure(text=UI["boot_no_stories"])
         self._show_menu_layer_one()
         self._warn_if_audio_environment_is_limited()
         self._warn_if_font_environment_is_limited()
@@ -428,14 +509,14 @@ class TurtleSoupApp(ctk.CTk):
         icon.pack(padx=24, pady=(20, 8))
         title = ctk.CTkLabel(
             card,
-            text=_ui_text("Turtle Soup"),
+            text=UI["startup_title"],
             font=self.title_font,
             text_color="#fef3c7",
         )
         title.pack(padx=24)
         subtitle = ctk.CTkLabel(
             card,
-            text=_ui_text("this is a turtlesoup game developed by Owen Bao, Jacky Yang and Xuan Puu"),
+            text=UI["startup_subtitle"],
             font=self.status_font,
             text_color="#d8b4fe",
             justify="center",
@@ -444,7 +525,7 @@ class TurtleSoupApp(ctk.CTk):
         subtitle.pack(padx=24, pady=(10, 12))
         status = ctk.CTkLabel(
             card,
-            text=_ui_text("Booting."),
+            text=UI["startup_booting"] + ".",
             font=self.status_font,
             text_color="#93c5fd",
         )
@@ -476,7 +557,7 @@ class TurtleSoupApp(ctk.CTk):
         if self._startup_icon_label and frame:
             self._startup_icon_label.configure(image=frame)
         if self._startup_status_label:
-            self._startup_status_label.configure(text=_ui_text(f"Booting{dots}"), text_color=colors[self._startup_step % len(colors)])
+            self._startup_status_label.configure(text=UI["startup_booting"] + dots, text_color=colors[self._startup_step % len(colors)])
         self._startup_step += 1
         self.after(280, self._animate_startup_overlay)
 
@@ -502,7 +583,7 @@ class TurtleSoupApp(ctk.CTk):
             "After installation, restart your terminal/session and run the app again."
         )
         self._append_bubble("System", message, role="system")
-        self.status_label.configure(text=_ui_text("Font environment limited: install scalable fonts to enable larger text"))
+        self.status_label.configure(text=UI["status_font_limited"])
 
     def _warn_if_audio_environment_is_limited(self) -> None:
         if self._audio_env_warning_shown:
@@ -512,7 +593,7 @@ class TurtleSoupApp(ctk.CTk):
             return
         self._audio_env_warning_shown = True
         self._append_bubble("System", message, role="system")
-        self.status_label.configure(text=_ui_text("Audio output unavailable: check WSL audio runtime"))
+        self.status_label.configure(text=UI["status_audio_unavailable"])
 
     def _render_story_buttons(self) -> None:
         for widget in self.story_list_frame.winfo_children():
@@ -521,7 +602,7 @@ class TurtleSoupApp(ctk.CTk):
         for index, story in enumerate(self.stories):
             button = ctk.CTkButton(
                 self.story_list_frame,
-                text=_ui_text(story.title),
+                text=story.title,
                 anchor="w",
                 font=self.base_font,
                 image=self.pixel_images.get("story_icon"),
@@ -531,6 +612,63 @@ class TurtleSoupApp(ctk.CTk):
             )
             button.pack(fill="x", padx=6, pady=6)
 
+    def _render_story_manage_buttons(self) -> None:
+        for widget in self.story_manage_list_frame.winfo_children():
+            widget.destroy()
+
+        for story in self.stories:
+            row = ctk.CTkFrame(self.story_manage_list_frame, fg_color="transparent")
+            row.pack(fill="x", padx=6, pady=4)
+
+            title_btn = ctk.CTkButton(
+                row,
+                text=story.title,
+                anchor="w",
+                font=self.base_font,
+                image=self.pixel_images.get("story_icon"),
+                compound="left",
+                **self._pixel_button_style(primary=False),
+                command=lambda s=story: self._open_custom_story_edit_dialog(s),
+            )
+            title_btn.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+            delete_btn = ctk.CTkButton(
+                row,
+                text="✕",
+                font=self.base_font,
+                width=40,
+                fg_color="#dc2626",
+                hover_color="#b91c1c",
+                corner_radius=6,
+                text_color="#fef3c7",
+                command=lambda s=story: self._delete_story(s),
+            )
+            delete_btn.pack(side="right")
+
+    def _open_story_management(self) -> None:
+        self.sounds.play("click")
+        self._render_story_manage_buttons()
+        self.story_manage_screen.tkraise()
+
+    def _back_to_menu(self) -> None:
+        self.sounds.play("click")
+        self.menu_screen.tkraise()
+
+    def _open_custom_story_dialog_from_manage(self) -> None:
+        self._open_custom_story_dialog(from_manage=True)
+
+    def _delete_story(self, story: Story) -> None:
+        filename = story.source_file.name
+        if messagebox.askyesno(UI["dialog_notice"], UI["story_management_delete_confirm"].format(story=filename)):
+            try:
+                story.source_file.unlink()
+                self.stories = [s.get_localized(LANGUAGE) for s in load_stories(STORIES_DIR)]
+                self._render_story_manage_buttons()
+                self._render_story_buttons()
+                messagebox.showinfo(UI["dialog_notice"], UI["story_management_deleted"])
+            except Exception as e:
+                messagebox.showerror(UI["dialog_notice"], f"Failed to delete: {e}")
+
     def _show_menu_layer_one(self) -> None:
         self._menu_layer = 1
         self.menu_screen.tkraise()
@@ -539,11 +677,11 @@ class TurtleSoupApp(ctk.CTk):
         self.menu_action_button.grid()
         self.menu_action_button.configure(state="normal")
         self.menu_bubble.configure(
-            text=_ui_text("Hello, I am Soupie, your story game agent. I'll guide you through this mystery chat.")
+            text=UI["menu_soupie_intro"]
         )
         self.menu_bob_bubble.grid()
         self.menu_bob_bubble.configure(
-            text=_ui_text("Hello, I'm Bob. I focus on rational elimination questions to test hypotheses and reduce uncertainty.")
+            text=UI["menu_bob_intro"]
         )
 
     def _go_to_story_layer(self) -> None:
@@ -558,14 +696,14 @@ class TurtleSoupApp(ctk.CTk):
         self.story_list_frame.grid()
         self.menu_bob_bubble.grid_remove()
         if not self.stories:
-            prompt = "No stories are available yet. Please add files under stories/."
+            prompt = UI["menu_no_stories"]
         elif first_prompt:
-            prompt = "Which story would you like to play?"
+            prompt = UI["menu_first_prompt"]
         else:
-            prompt = "Which one would you like to play next?"
-        self.menu_bubble.configure(text=_ui_text(prompt))
+            prompt = UI["menu_retry_prompt"]
+        self.menu_bubble.configure(text=prompt)
         if self.stories:
-            self.status_label.configure(text=_ui_text("Choose your story to enter the chat room."))
+            self.status_label.configure(text=UI["status_choose_story"])
 
     def _show_game_screen(self) -> None:
         self.game_screen.tkraise()
@@ -579,7 +717,7 @@ class TurtleSoupApp(ctk.CTk):
     def on_start_story(self) -> None:
         self.sounds.play("click")
         if self.selected_story_index is None:
-            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please choose a story first."))
+            messagebox.showinfo(UI["dialog_notice"], UI["dialog_choose_story"])
             return
         story = self.stories[self.selected_story_index]
         self.session.start_story(story)
@@ -587,11 +725,11 @@ class TurtleSoupApp(ctk.CTk):
         self._clear_chat_bubbles()
         self._set_story_header(story)
         self._append_bubble(
-            "Soupy",
-            "Story surface is pinned above. Ask your questions anytime. I will reply with only: Yes / No / Irrelevant.",
+            UI["speaker_soupy"],
+            UI["bubble_story"],
             role="agent",
         )
-        self.status_label.configure(text=_ui_text(f"Now playing: {story.title}"))
+        self.status_label.configure(text=UI["status_playing"].format(title=story.title))
         self._show_game_screen()
 
     def on_reset(self) -> None:
@@ -604,19 +742,19 @@ class TurtleSoupApp(ctk.CTk):
         self._set_story_header(None)
         self.selected_story_index = None
         self.back_to_menu_button.grid_remove()
-        self.status_label.configure(text=_ui_text("New round ready"))
+        self.status_label.configure(text=UI["dialog_new_round"])
         self._show_menu_layer_two(first_prompt=False)
 
     def on_ask_question(self) -> None:
         self.sounds.play("click")
         if self.session.story is None:
-            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please start a story first."))
+            messagebox.showinfo(UI["dialog_notice"], UI["dialog_start_story"])
             return
         if self.is_thinking:
-            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please wait for the current reply to finish."))
+            messagebox.showinfo(UI["dialog_notice"], UI["dialog_wait_reply"])
             return
         if not self.session.can_ask():
-            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please wait for Bob to finish his turn."))
+            messagebox.showinfo(UI["dialog_notice"], UI["dialog_wait_bob"])
             return
         question = self.question_entry.get().strip()
         if not question:
@@ -633,7 +771,7 @@ class TurtleSoupApp(ctk.CTk):
             if story is None:
                 self.after(
                     0,
-                    lambda: self._on_worker_error(_ui_text("Current story is unavailable. Please start again."), request_epoch),
+                    lambda: self._on_worker_error(UI["dialog_story_unavailable"], request_epoch),
                 )
                 return
             try:
@@ -647,7 +785,7 @@ class TurtleSoupApp(ctk.CTk):
                 self.after(
                     0,
                     lambda: self._on_worker_error(
-                        _ui_text("Model did not respond. Check local service and retry."),
+                        UI["dialog_model_no_response"],
                         request_epoch,
                     ),
                 )
@@ -674,7 +812,7 @@ class TurtleSoupApp(ctk.CTk):
         self.sounds.play("thinking")
         self._set_player_controls(False)
         self._set_thinking(True)
-        self.status_label.configure(text=_ui_text("Bob is formulating a rational question..."))
+        self.status_label.configure(text=UI["dialog_bob_thinking"])
         request_epoch = self._story_epoch
 
         def worker() -> None:
@@ -682,7 +820,7 @@ class TurtleSoupApp(ctk.CTk):
             if story is None:
                 self.after(
                     0,
-                    lambda: self._on_worker_error(_ui_text("Current story is unavailable. Please start again."), request_epoch),
+                    lambda: self._on_worker_error(UI["dialog_story_unavailable"], request_epoch),
                 )
                 return
             try:
@@ -691,7 +829,7 @@ class TurtleSoupApp(ctk.CTk):
                 self.after(
                     0,
                     lambda: self._on_worker_error(
-                        _ui_text("Bob couldn't respond right now. Please retry in a moment."),
+                        UI["dialog_bob_no_response"],
                         request_epoch,
                     ),
                 )
@@ -709,7 +847,7 @@ class TurtleSoupApp(ctk.CTk):
 
         if action.action == "question":
             self._append_bubble("Bob", action.text, role="bob")
-            self.status_label.configure(text=_ui_text("Soupy is answering Bob..."))
+            self.status_label.configure(text=UI["dialog_soupy_answering"])
             request_epoch = self._story_epoch
 
             def worker() -> None:
@@ -718,7 +856,7 @@ class TurtleSoupApp(ctk.CTk):
                     self.after(
                         0,
                         lambda: self._on_worker_error(
-                            _ui_text("Current story is unavailable. Please start again."),
+                            UI["dialog_story_unavailable"],
                             request_epoch,
                         ),
                     )
@@ -734,7 +872,7 @@ class TurtleSoupApp(ctk.CTk):
                     self.after(
                         0,
                         lambda: self._on_worker_error(
-                            _ui_text("Model did not respond. Check local service and retry."),
+                            UI["dialog_model_no_response"],
                             request_epoch,
                         ),
                     )
@@ -746,7 +884,7 @@ class TurtleSoupApp(ctk.CTk):
 
         self.session.to_bob_guessing()
         self._append_bubble("Bob", f"Final guess: {action.text}", role="bob")
-        self.status_label.configure(text=_ui_text("Judging Bob's theory..."))
+        self.status_label.configure(text=UI["status_judging_bob"])
         request_epoch = self._story_epoch
 
         def worker() -> None:
@@ -754,7 +892,7 @@ class TurtleSoupApp(ctk.CTk):
             if story is None:
                 self.after(
                     0,
-                    lambda: self._on_worker_error(_ui_text("Current story is unavailable. Please start again."), request_epoch),
+                    lambda: self._on_worker_error(UI["dialog_story_unavailable"], request_epoch),
                 )
                 return
             try:
@@ -763,7 +901,7 @@ class TurtleSoupApp(ctk.CTk):
                 self.after(
                     0,
                     lambda: self._on_worker_error(
-                        _ui_text("Judge is unavailable right now. Please retry in a moment."),
+                        UI["dialog_judge_unavailable"],
                         request_epoch,
                     ),
                 )
@@ -780,7 +918,7 @@ class TurtleSoupApp(ctk.CTk):
             return
         self.session.add_qa(question, answer)
         self._append_bubble("Soupy", answer, role="agent")
-        self.status_label.configure(text=_ui_text("Your turn to ask the next question."))
+        self.status_label.configure(text=UI["status_next_question"])
         self._finish_bob_turn()
 
     def _on_bob_guess_judged(self, result: JudgeResult, request_epoch: int) -> None:
@@ -795,7 +933,7 @@ class TurtleSoupApp(ctk.CTk):
         self._append_bubble("Soupy", f"Bob's theory scored {result.score}/100. {comment}", role="agent")
 
         if success:
-            self.status_label.configure(text=_ui_text("Bob cracked the case!"))
+            self.status_label.configure(text=UI["status_bob_cracked"])
             self.session.state = GameState.IDLE
             full_story = self.session.story.bottom
             self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
@@ -811,7 +949,7 @@ class TurtleSoupApp(ctk.CTk):
 
         self.session.mark_bob_crying()
         self._append_bubble("Bob", "I'll step back to reassess. Please continue your line of questioning.", role="bob")
-        self.status_label.configure(text=_ui_text("Bob is stepping back to reassess. Your turn."))
+        self.status_label.configure(text=UI["status_bob_reassess"])
         self.session.to_player_questioning()
         self._set_player_controls(True)
         self._set_thinking(False)
@@ -825,15 +963,15 @@ class TurtleSoupApp(ctk.CTk):
     def on_submit_guess(self) -> None:
         self.sounds.play("click")
         if self.session.story is None:
-            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please start a story first."))
+            messagebox.showinfo(UI["dialog_notice"], UI["dialog_start_story"])
             return
         if self.is_thinking:
-            messagebox.showinfo(_ui_text("Notice"), _ui_text("Please wait for the current reply to finish."))
+            messagebox.showinfo(UI["dialog_notice"], UI["dialog_wait_reply"])
             return
         if self.session.state not in {GameState.QUESTIONING, GameState.BOB_CRYING}:
             messagebox.showinfo(
-                _ui_text("Notice"),
-                _ui_text("Please wait for Bob to finish his turn before submitting a final theory."),
+                UI["dialog_notice"],
+                UI["dialog_wait_bob_guess"],
             )
             return
 
@@ -846,7 +984,7 @@ class TurtleSoupApp(ctk.CTk):
         self.sounds.play("thinking")
         self._append_bubble("You", f"Final guess: {guess}", role="user")
         self._set_thinking(True)
-        self.status_label.configure(text=_ui_text("Judging your theory..."))
+        self.status_label.configure(text=UI["status_judging_player"])
         request_epoch = self._story_epoch
 
         def worker() -> None:
@@ -854,7 +992,7 @@ class TurtleSoupApp(ctk.CTk):
             if story is None:
                 self.after(
                     0,
-                    lambda: self._on_worker_error(_ui_text("Current story is unavailable. Please start again."), request_epoch),
+                    lambda: self._on_worker_error(UI["dialog_story_unavailable"], request_epoch),
                 )
                 return
             try:
@@ -862,7 +1000,7 @@ class TurtleSoupApp(ctk.CTk):
             except OpenAIError:
                 self.after(
                     0,
-                    lambda: self._on_worker_error(_ui_text("Judge is unavailable right now. Please retry in a moment."), request_epoch),
+                    lambda: self._on_worker_error(UI["dialog_judge_unavailable"], request_epoch),
                 )
                 return
             self.after(0, lambda: self._on_guess_judged(result, request_epoch))
@@ -874,17 +1012,17 @@ class TurtleSoupApp(ctk.CTk):
             return
         full_story = self.session.story.bottom
         success = result.hit or result.score >= FINAL_GUESS_SUCCESS_SCORE
-        verdict = _ui_text("Correct!") if success else _ui_text("Not quite.")
+        verdict = UI["dialog_correct"] if success else UI["dialog_not_quite"]
         if success:
             self.sounds.play("success")
         else:
             self.sounds.play("fail")
         self._append_bubble("Judge", f"{verdict} (match score {result.score}/100) {result.comment}", role="agent")
         if success:
-            self.status_label.configure(text=_ui_text("Amazing! You solved it."))
+            self.status_label.configure(text=UI["status_player_solved"])
             self.session.state = GameState.IDLE
         else:
-            self.status_label.configure(text=_ui_text("Nice try. Full story revealed."))
+            self.status_label.configure(text=UI["status_player_close"])
             self.session.state = GameState.IDLE
         self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
         self._append_bubble("Soupy", "Which one would you like to play next? Click Back to Story Menu to continue.", role="agent")
@@ -894,7 +1032,7 @@ class TurtleSoupApp(ctk.CTk):
 
     def _prompt_final_guess(self) -> str | None:
         dialog = ctk.CTkToplevel(self)
-        dialog.title(_ui_text("Final Theory"))
+        dialog.title(UI["dialog_final_title"])
         dialog.geometry("920x560")
         dialog.minsize(760, 460)
         dialog.configure(fg_color="#1f1635")
@@ -908,7 +1046,7 @@ class TurtleSoupApp(ctk.CTk):
 
         ctk.CTkLabel(
             dialog,
-            text=_ui_text("Share your full final theory:"),
+            text=UI["dialog_final_prompt"],
             font=self.base_font,
             anchor="w",
             justify="left",
@@ -958,7 +1096,7 @@ class TurtleSoupApp(ctk.CTk):
 
         ctk.CTkButton(
             button_row,
-            text=_ui_text("Cancel"),
+            text=UI["dialog_cancel"],
             command=cancel,
             font=self.base_font,
             image=self.pixel_images.get("button_icon"),
@@ -969,7 +1107,7 @@ class TurtleSoupApp(ctk.CTk):
         )
         ctk.CTkButton(
             button_row,
-            text=_ui_text("Submit"),
+            text=UI["dialog_submit"],
             command=submit,
             font=self.base_font,
             image=self.pixel_images.get("button_icon"),
@@ -981,6 +1119,245 @@ class TurtleSoupApp(ctk.CTk):
         dialog.protocol("WM_DELETE_WINDOW", cancel)
         self.wait_window(dialog)
         return result["value"]
+
+    def _detect_language(self, text: str) -> str:
+        """Simple heuristic: if text contains Chinese characters, it's Chinese."""
+        for ch in text:
+            if "\u4e00" <= ch <= "\u9fff":
+                return "zh"
+        return "en"
+
+    def _open_custom_story_dialog(self, from_manage: bool = False, edit_story: Story | None = None) -> None:
+        self.sounds.play("click")
+        dialog = ctk.CTkToplevel(self)
+        is_edit = edit_story is not None
+        dialog.title(UI["custom_story_title"] if not is_edit else f"{UI['custom_story_title']} - {edit_story.title}")
+        dialog.geometry("700x600")
+        dialog.minsize(600, 500)
+        dialog.configure(fg_color="#1f1635")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        dialog.grid_columnconfigure(0, weight=1)
+        dialog.grid_rowconfigure(4, weight=1)
+
+        # Pre-fill if editing
+        orig_title = edit_story.title_zh or edit_story.title_en if is_edit else ""
+        orig_surface = edit_story.surface_zh or edit_story.surface_en if is_edit else ""
+        orig_bottom = edit_story.bottom_zh or edit_story.bottom_en if is_edit else ""
+
+        # Title
+        ctk.CTkLabel(
+            dialog,
+            text=UI["custom_story_label_title"],
+            font=self.base_font,
+            anchor="w",
+            text_color="#fef3c7",
+        ).grid(row=0, column=0, padx=24, pady=(20, 4), sticky="w")
+        title_entry = ctk.CTkEntry(
+            dialog,
+            placeholder_text=UI["custom_story_placeholder_title"],
+            font=self.base_font,
+            fg_color="#140f25",
+            border_width=2,
+            border_color="#8b5cf6",
+            text_color="#f8fafc",
+        )
+        title_entry.grid(row=1, column=0, padx=24, pady=(0, 12), sticky="ew")
+        if orig_title:
+            title_entry.insert(0, orig_title)
+
+        # Surface
+        ctk.CTkLabel(
+            dialog,
+            text=UI["custom_story_label_surface"],
+            font=self.base_font,
+            anchor="w",
+            text_color="#fef3c7",
+        ).grid(row=2, column=0, padx=24, pady=(4, 4), sticky="w")
+        surface_text = ctk.CTkTextbox(
+            dialog,
+            font=self.base_font,
+            fg_color="#140f25",
+            border_width=2,
+            border_color="#8b5cf6",
+            text_color="#f8fafc",
+            height=100,
+        )
+        surface_text.grid(row=3, column=0, padx=24, pady=(0, 12), sticky="ew")
+        if orig_surface:
+            surface_text.insert("1.0", orig_surface)
+
+        # Bottom
+        ctk.CTkLabel(
+            dialog,
+            text=UI["custom_story_label_bottom"],
+            font=self.base_font,
+            anchor="w",
+            text_color="#fef3c7",
+        ).grid(row=4, column=0, padx=24, pady=(4, 4), sticky="w")
+        bottom_text = ctk.CTkTextbox(
+            dialog,
+            font=self.base_font,
+            fg_color="#140f25",
+            border_width=2,
+            border_color="#8b5cf6",
+            text_color="#f8fafc",
+            height=120,
+        )
+        bottom_text.grid(row=5, column=0, padx=24, pady=(0, 16), sticky="nsew")
+        if orig_bottom:
+            bottom_text.insert("1.0", orig_bottom)
+
+        # Buttons
+        button_row = ctk.CTkFrame(dialog, fg_color="transparent")
+        button_row.grid(row=6, column=0, padx=24, pady=(0, 20), sticky="e")
+
+        def _translate_story(title: str, surface: str, bottom: str, target_lang: str) -> dict:
+            """Translate entire story using the local LLM. Returns dict with title, surface, bottom."""
+            if target_lang == "zh":
+                system_prompt = """你是一个专业的翻译助手。请将以下海龟汤故事翻译成中文。
+要求：
+1. 保持悬疑感和故事氛围
+2. 语言简洁流畅，符合中文表达习惯
+3. 严格按照以下JSON格式返回，不要添加任何其他内容：
+{"title": "翻译后的标题", "surface": "翻译后的汤面", "bottom": "翻译后的汤底"}"""
+            else:
+                system_prompt = """You are a professional translation assistant. Please translate the following Turtle Soup story into English.
+Requirements:
+1. Maintain the suspenseful atmosphere
+2. Use concise and natural English
+3. Return ONLY a valid JSON object in this exact format, nothing else:
+{"title": "translated title", "surface": "translated surface", "bottom": "translated bottom"}"""
+
+            try:
+                from openai import OpenAI
+                import json
+                client = OpenAI(base_url=MODEL_BASE_URL, api_key=MODEL_API_KEY)
+                user_content = f"Title: {title}\nSurface: {surface}\nBottom: {bottom}"
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    temperature=0.3,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                    ],
+                )
+                result_text = response.choices[0].message.content.strip()
+                # Try to parse JSON
+                try:
+                    result = json.loads(result_text)
+                    return {
+                        "title": result.get("title", ""),
+                        "surface": result.get("surface", ""),
+                        "bottom": result.get("bottom", ""),
+                    }
+                except json.JSONDecodeError:
+                    # Fallback: try to extract from markdown code block
+                    if "```" in result_text:
+                        json_str = result_text.split("```")[1]
+                        if json_str.startswith("json"):
+                            json_str = json_str[4:]
+                        result = json.loads(json_str.strip())
+                        return {
+                            "title": result.get("title", ""),
+                            "surface": result.get("surface", ""),
+                            "bottom": result.get("bottom", ""),
+                        }
+                    return {"title": "", "surface": "", "bottom": ""}
+            except Exception:
+                return {"title": "", "surface": "", "bottom": ""}
+
+        def save_story() -> None:
+            title = title_entry.get().strip()
+            surface = surface_text.get("1.0", tk.END).strip()
+            bottom = bottom_text.get("1.0", tk.END).strip()
+
+            if not title or not surface or not bottom:
+                messagebox.showwarning(UI["dialog_notice"], UI["custom_story_fill_all"])
+                return
+
+            # Auto-detect language
+            lang = self._detect_language(title + surface + bottom)
+            target_lang = "en" if lang == "zh" else "zh"
+
+            # Show translating status
+            save_btn.configure(state="disabled", text=UI["custom_story_translating"])
+            dialog.update()
+
+            # Translate entire story at once
+            translated = _translate_story(title, surface, bottom, target_lang)
+            title_translated = translated["title"] or title
+            surface_translated = translated["surface"] or surface
+            bottom_translated = translated["bottom"] or bottom
+
+            # Build bilingual file content
+            if lang == "zh":
+                content = (
+                    f"[Title_zh]\n{title}\n\n"
+                    f"[Surface_zh]\n{surface}\n\n"
+                    f"[Bottom_zh]\n{bottom}\n\n"
+                    f"[Title_en]\n{title_translated}\n\n"
+                    f"[Surface_en]\n{surface_translated}\n\n"
+                    f"[Bottom_en]\n{bottom_translated}\n"
+                )
+            else:
+                content = (
+                    f"[Title_en]\n{title}\n\n"
+                    f"[Surface_en]\n{surface}\n\n"
+                    f"[Bottom_en]\n{bottom}\n\n"
+                    f"[Title_zh]\n{title_translated}\n\n"
+                    f"[Surface_zh]\n{surface_translated}\n\n"
+                    f"[Bottom_zh]\n{bottom_translated}\n"
+                )
+
+            # Generate filename
+            safe_title = re.sub(r"[^\w\s-]", "", title).strip().replace(" ", "_")
+            if not safe_title:
+                safe_title = "custom_story"
+            filename = f"{safe_title}.txt"
+            filepath = STORIES_DIR / filename
+
+            # Avoid overwriting (skip existing file if editing)
+            counter = 1
+            while filepath.exists() and (not is_edit or filepath != edit_story.source_file):
+                filename = f"{safe_title}_{counter}.txt"
+                filepath = STORIES_DIR / filename
+                counter += 1
+
+            filepath.write_text(content, encoding="utf-8")
+
+            # Reload stories
+            self.stories = [s.get_localized(LANGUAGE) for s in load_stories(STORIES_DIR)]
+            self._render_story_buttons()
+            if from_manage:
+                self._render_story_manage_buttons()
+
+            messagebox.showinfo(UI["dialog_notice"], UI["custom_story_saved"])
+            dialog.destroy()
+
+        cancel_btn = ctk.CTkButton(
+            button_row,
+            text=UI["dialog_cancel"],
+            command=dialog.destroy,
+            font=self.base_font,
+            **self._pixel_button_style(primary=False),
+        )
+        cancel_btn.pack(side="right", padx=(10, 0))
+
+        save_btn = ctk.CTkButton(
+            button_row,
+            text=UI["dialog_submit"],
+            command=save_story,
+            font=self.base_font,
+            **self._pixel_button_style(primary=True),
+        )
+        save_btn.pack(side="right")
+
+        self.wait_window(dialog)
+
+    def _open_custom_story_edit_dialog(self, story: Story) -> None:
+        self._open_custom_story_dialog(from_manage=True, edit_story=story)
 
     def _set_player_controls(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
@@ -1029,16 +1406,16 @@ class TurtleSoupApp(ctk.CTk):
 
     def _set_story_header(self, story: Story | None) -> None:
         if story is None:
-            self.story_header_title.configure(text=_ui_text("Story Surface"))
-            self.story_header_text.configure(text=_ui_text("Choose a story to see the surface here."))
+            self.story_header_title.configure(text=UI["game_story_surface"])
+            self.story_header_text.configure(text=UI["game_story_header_empty"])
             return
-        self.story_header_title.configure(text=_ui_text(f"Story Surface · {story.title}"))
-        self.story_header_text.configure(text=_ui_text(story.surface))
+        self.story_header_title.configure(text=UI["game_story_surface_title"].format(title=story.title))
+        self.story_header_text.configure(text=story.surface)
 
     def _animate_thinking(self) -> None:
         if not self.is_thinking:
             return
-        patterns = [_ui_text("Thinking   "), _ui_text("Thinking.  "), _ui_text("Thinking.. "), _ui_text("Thinking...")]
+        patterns = UI["game_thinking"]
         colors = ["#60a5fa", "#93c5fd", "#60a5fa", "#3b82f6"]
         idx = self._thinking_step % len(patterns)
         self.thinking_label.configure(text=patterns[idx], text_color=colors[idx])
@@ -1143,7 +1520,7 @@ class TurtleSoupApp(ctk.CTk):
 
         ctk.CTkLabel(
             bubble,
-            text=_ui_text(speaker),
+            text=speaker,
             justify="left",
             anchor="w",
             wraplength=760,
@@ -1154,7 +1531,7 @@ class TurtleSoupApp(ctk.CTk):
         ).pack(padx=14, pady=(10, 4), fill="x")
         ctk.CTkLabel(
             bubble,
-            text=_ui_text(text),
+            text=text,
             justify="left",
             anchor="w",
             wraplength=760,

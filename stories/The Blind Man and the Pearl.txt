@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 The Blind Man and the Pearl
 
-[Surface]
+[Surface_en]
 A blind man finds a pearl on the beach and cries with joy. After carefully feeling the pearl, he suddenly clutches his head, sobs, and drowns himself.
 
-[Bottom]
+[Bottom_en]
 He was not always blind. In a shipwreck he lost his sight and was stranded on an island with his wife. She fed him "pearl meat" from shellfish and said they would sell the pearls once rescued. After they were saved, she died. When he touched a real pearl on the beach, he realized it was nothing like what he had eaten. There had been no pearls on the island. She had cut her own flesh to keep him alive and lied to him about it.
+
+[Title_zh]
+盲人与珍珠
+
+[Surface_zh]
+一个盲人在海滩上找到一颗珍珠，喜极而泣。仔细抚摸珍珠后，他突然抱住头，痛哭流涕，然后投海自尽。
+
+[Bottom_zh]
+他并非天生失明。在一次海难中他失去了视力，和妻子一起被困在岛上。妻子喂他吃贝类中的"珍珠肉"，说获救后就把珍珠卖掉。获救后妻子去世了。当他在海滩上摸到真正的珍珠时，他意识到那和他吃过的东西完全不同。岛上根本没有珍珠。妻子割下自己的肉让他活下来，却对他撒了谎。

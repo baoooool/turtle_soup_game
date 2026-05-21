@@ -6,6 +6,9 @@ STORIES_DIR = PROJECT_ROOT / "stories"
 AUDIO_RES_DIR = PROJECT_ROOT / "audio_res"
 SFX_DIR = AUDIO_RES_DIR
 
+# Language: "zh" for Chinese, "en" for English
+LANGUAGE = os.getenv("TS_LANGUAGE", "zh").lower()
+
 MODEL_BASE_URL = os.getenv("TS_BASE_URL", "http://127.0.0.1:11434/v1")
 MODEL_API_KEY = os.getenv("TS_API_KEY", "local-key")
 MODEL_NAME = os.getenv("TS_MODEL", "qwen2.5:7b-instruct")

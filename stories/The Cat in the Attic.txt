@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 The Cat in the Attic
 
-[Surface]
+[Surface_en]
 A woman who lives alone hears faint cat meows from the attic every night. One day she finally goes up to check, finds nothing, and after coming down she moves out that very night.
 
-[Bottom]
+[Bottom_en]
 She does not own a cat. The attic is a sealed, dusty room with no trace of an animal. She realizes the "meowing" was not a cat at all, but someone hiding in the wall cavity, playing a faint cat recording on a phone to cover their heavy breathing.
+
+[Title_zh]
+阁楼里的猫
+
+[Surface_zh]
+一个独居的女人每晚都能听到阁楼里传来微弱的猫叫声。有一天她终于上楼查看，却什么也没找到，下楼后当晚就搬走了。
+
+[Bottom_zh]
+她并没有养猫。阁楼是一个封闭、布满灰尘的房间，没有任何动物踪迹。她意识到"猫叫"根本不是猫，而是有人藏在墙缝里，用手机播放微弱的猫叫声来掩盖自己沉重的呼吸声。

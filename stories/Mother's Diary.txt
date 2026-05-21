@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 Mother's Diary
 
-[Surface]
+[Surface_en]
 Eighteen-year-old Xiaoming accidentally reads his mother's diary from twenty years ago. It says, "Today I gave birth to a big, healthy baby boy. I am so happy. We will be together forever." Xiaoming trembles in terror.
 
-[Bottom]
+[Bottom_en]
 Xiaoming is only eighteen, but the diary entry is twenty years old. That baby boy was not him but an older brother he has never heard about. Combined with the locked iron door to the basement that no one is allowed to approach, he realizes the horrific truth.
+
+[Title_zh]
+母亲的日记
+
+[Surface_zh]
+十八岁的小明偶然读到了母亲二十年前的日记。上面写着："今天我生下了一个健康的大胖小子。我太高兴了。我们将永远在一起。"小明吓得浑身发抖。
+
+[Bottom_zh]
+小明只有十八岁，但日记是二十年前写的。那个男孩不是他，而是一个他从未听说过的哥哥。再加上地下室那扇谁也不准靠近的铁门，他意识到了可怕的真相。

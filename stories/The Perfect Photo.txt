@@ -1,8 +1,17 @@
-[Title]
+[Title_en]
 The Perfect Photo
 
-[Surface]
+[Surface_en]
 A photographer captures a stunning photo of a volcanic eruption and wins an international award. On the eve of the ceremony, he kills himself in his studio.
 
-[Bottom]
+[Bottom_en]
 To get the perfect close-up, he entered a forbidden danger zone. During the eruption, a young couple in front of him begged for help. He chose not to help so he would not ruin the composition and timing, and instead pressed the shutter. After the award, their desperate faces haunted him, and he could not bear the guilt.
+
+[Title_zh]
+完美的照片
+
+[Surface_zh]
+一位摄影师拍摄了一张火山爆发的惊人照片，获得了国际大奖。在颁奖典礼前夕，他在工作室里自杀了。
+
+[Bottom_zh]
+为了拍到完美的特写，他进入了禁止的危险区域。在火山爆发期间，他面前的一对年轻夫妇向他求救。他选择不帮忙，以免破坏构图和时机，而是按下了快门。获奖后，他们绝望的面孔一直萦绕在他心头，他无法承受内心的愧疚。
