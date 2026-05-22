@@ -1,0 +1,25 @@
+[Title_en]
+Midnight Elevator
+
+[Surface_en]
+A man returned to his apartment late at night and pressed floor 15 in the elevator.
+As the doors closed, he suddenly shouted, "Great, I'm finally safe!"
+The next day, he was found dead in the hallway on floor 15.
+
+[Bottom_en]
+He was being followed, and the killer was waiting on floor 15.
+Another resident had been in the elevator with him, so he mistakenly felt safer while not alone.
+That resident got off on floor 14, and then the killer murdered him on floor 15.
+
+[Title_zh]
+午夜电梯
+
+[Surface_zh]
+一个男人深夜回到公寓，在电梯里按了15楼。
+电梯门关上时，他突然大喊："太好了，我终于安全了！"
+第二天，人们发现他死在15楼的走廊里。
+
+[Bottom_zh]
+他被人跟踪了，凶手正在15楼等他。
+电梯里还有另一位住户，他误以为有人陪着就安全了。
+那位住户在14楼下电梯后，凶手在15楼杀害了他。

@@ -1,0 +1,39 @@
+# 任务目标：为 Turtle Soup Game 引入 AI 陪玩角色 "Bob"
+
+请为当前的海龟汤游戏添加一个新的 NPC 角色 "Bob"。他将作为玩家的同伴一起游玩。
+
+**【极其重要】**：在执行任何终端命令时，必须使用现有的 Conda 环境 `turtle_soup_env`，**绝对不要**创建任何新的虚拟环境（禁止使用 `python -m venv`, `conda create` 等）。
+
+请严格遵循 `copilot-instructions.md` 中的架构规范，在对应的模块中实现以下功能，并确保代码的健壮性：
+
+## 1. 角色初始化与 UI 呈现 (UI & Asset Layer)
+* **开始菜单**：在 `app/ui/main_window.py` 的启动画面中，添加 Bob 的非 LLM 驱动自我介绍。这一步需与 Soupie 的介绍流程保持一致，确保不破坏现有的 startup overlay sequence 体验。
+* **素材加载**：
+    * **图像**：Bob 的图像从 `PixelPetesArtAssets` 目录加载。
+    * **音频**：Bob 的所有交互从 `audio_res` 文件夹加载对应的音效文件。请保持现有的音频容灾降级机制（dummy audio mode）。
+
+## 2. 游戏核心循环与状态机 (Game Logic & State Machine)
+* **状态更新**：在 `app/game/state.py` 中扩展现有的状态机（`GameState`），新增类似 `BOB_QUESTIONING`, `BOB_GUESSING` 和 `BOB_CRYING` 的状态。
+* **回合制逻辑**：在 `app/game/manager.py` (GameSession) 中管理提问轮换机制。流程必须是：`玩家提问 -> Soupie回答 -> Bob提问 -> Soupie回答 -> 玩家提问`。
+* **Bob 的退场机制**：如果 Bob 触发了 Final Guess，且被 Soupie 判定分数 < 80，将 Bob 的状态标记为“沮丧/哭泣”。此后在当前这局游戏中，彻底跳过 Bob 的回合，不再调用 LLM 让他发言。
+
+## 3. LLM 引擎与角色设定 (LLM Integration - app/llm/client.py)
+内部封装是本次任务的重点。请在 `app/llm/client.py` 中为 Bob 添加专属的 System Prompt 和生成方法：
+
+* **Bob 的核心人设（喜剧角色与排除法担当）**：
+    * Bob 是一个脑洞极大、逻辑清奇且经常问出“蠢问题”的喜剧角色。
+    * **游戏机制目的**：他的存在是为了帮助玩家做“排除法”。他提问的方向应该倾向于那些**常见但错误的常识性假设**、**离谱的超自然现象**或**极其字面意思的误解**（例如：“他是不是被路过的恐龙踩死的？”）。
+    * 在构建 Prompt 时，请使用强烈的指令约束（如 "You MUST act as a foolish but enthusiastic player..."），确保底层模型不会偏离这个滑稽的设定。
+* **Bob 的决策引擎 (`generate_bob_action`)**：
+    * **输入**：当前汤面 (Surface)、最新的对话上下文 (Context window)。
+    * **输出格式**：强制要求 LLM 输出**严格的 JSON 格式**（例如 `{"action": "question", "text": "..."}` 或 `{"action": "guess", "text": "..."}`）。
+    * **决策权重**：
+        * **提问 (Question)**：在绝大多数情况下，Bob 应该结合当前的 Surface 生成一个符合他人设的封闭式问题（必须能用是/否/无关回答）。
+        * **瞎猜 (Final Guess)**：只有当他的内部逻辑（无论多荒谬）形成闭环时，他才会触发 `guess`。他给出的 Final Guess 应该是一个虽然离谱，但在他看来“完美契合”已知条件的搞笑故事。
+* **Soupie 的交互反馈**：当 Bob 给出离谱的 Final Guess 且得分极低时，Soupie 的返回 JSON 中除了评分，还可以包含一句对 Bob 荒谬逻辑的无语吐槽，并在 UI 上展示。
+* **容错与重试机制**：如果 Bob 输出的 JSON 解析失败，或者 Soupie 在评价 Bob 猜测时输出的 JSON 格式错误，必须在 `LLMEngine` 内部捕获异常，并使用更严格的 Prompt 重新发起重试调用，直到输出合法为止。请复用现有 `judge_guess` 或 `ask_question` 中的 fallback 逻辑。
+
+## 4. 线程安全与异步回调 (CRITICAL: Threading & Async Rules)
+* Bob 思考问题和 Soupie 回答 Bob 的过程（所有 LLM 调用）**必须**运行在 Daemon worker threads（后台守护线程）中。
+* 主 UI 的更新（如显示 Bob 的头像、播放音效、将文本打字机输出到聊天界面）**必须**通过 `self.after(...)` 编排回主线程执行。
+* **防脏数据守卫**：在应用任何异步 LLM 结果前，必须检查 `_story_epoch` 是否与请求发起时一致。如果用户在 Bob 思考时重置了游戏或切换了故事，必须静默丢弃旧的回调结果，防止程序崩溃或状态错乱。
