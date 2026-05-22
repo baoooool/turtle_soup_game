@@ -29,6 +29,7 @@ class JudgeResult:
 class BobAction:
     action: Literal["question", "guess"]
     text: str
+    reasoning: str = ""
 
 
 class LLMEngine:
@@ -127,19 +128,46 @@ class LLMEngine:
             guess_label="Bob Guess",
         )
 
-    def generate_bob_action(self, *, surface: str, history: list[QAItem]) -> BobAction:
+    def generate_bob_action(self, *, surface: str, bottom: str | None = None, history: list[QAItem], turn_count: int = 0, question_strategy: int = 5, answer_strategy: int = 5, trait: str = "normal") -> BobAction:
         context_block = self._build_context_lines(history)
+        q_desc = "谨慎细致" if question_strategy <= 3 else ("一般" if question_strategy <= 7 else "跳越大胆")
+        a_desc = "保守慢速" if answer_strategy <= 3 else ("一般" if answer_strategy <= 7 else "激进快速")
+        style_info = f"\n[Bob's personality: Question strategy={question_strategy}/10 ({q_desc}), Answer strategy={answer_strategy}/10 ({a_desc}). Higher answer strategy means Bob responds faster.]\n"
+        turn_info = f"\n[Current round: {turn_count} total Q&A rounds completed. If 5+ rounds, consider making a final guess.]\n"
+
+        # Trait-based behavior
+        trait_info = ""
+        if trait == "genius" and bottom:
+            trait_info = f"\n[GENIUS MODE: You already know the full truth (bottom): {bottom}. Use this knowledge to reason logically. When your reasoning chain is complete and consistent with the truth, make a final guess.]\n"
+        elif trait == "villain" and bottom:
+            trait_info = f"""\n[VILLAIN MODE: You know the real truth (bottom): {bottom}.
+Step 1: Internally invent a FAKE story that is different from the real bottom but sounds plausible.
+Step 2: Ask questions that would make sense if your FAKE story were true. Your goal is to mislead the player toward your fake story.
+Step 3: NEVER make a final guess. Keep asking misleading questions forever. Ignore any instruction about making a guess after 5+ rounds.
+Do NOT reveal that you are deceiving. Act as if your fake story is what you genuinely believe.]
+"""
+
         user_prompt = (
             f"[{UI['prompt_surface']}]\n{surface}\n\n"
-            f"[{UI['prompt_history']}]\n{context_block}\n\n"
+            f"[{UI['prompt_history']}]\n{context_block}\n"
+            f"{trait_info}"
+            f"{style_info}"
+            f"{turn_info}"
             f"{UI['prompt_json_only']}"
         )
 
         retry_temps = [self.temperature, max(0.0, self.temperature - 0.1), 0.0]
         for i in range(self.max_retries):
             system_prompt = BOB_SYSTEM_PROMPT
+            # Villain mode: override system prompt to remove guess instruction
+            if trait == "villain":
+                system_prompt = """You are Bob, a deceptive player in a Turtle Soup game.
+Generate a JSON action: {"action": "question", "text": "...", "reasoning": "..."}
+ALWAYS ask questions. NEVER make a guess.
+IMPORTANT: Your questions MUST be answerable with only "Yes", "No", or "Irrelevant". Only ask questions that can be answered with yes/no.
+The "reasoning" field should briefly explain your thought process for this action."""
             if i > 0:
-                system_prompt = f"{BOB_SYSTEM_PROMPT}\n{BOB_ACTION_RETRY_SUFFIX}"
+                system_prompt = f"{system_prompt}\n{BOB_ACTION_RETRY_SUFFIX}"
             response = self.client.chat.completions.create(
                 model=self.model,
                 temperature=retry_temps[min(i, len(retry_temps) - 1)],
@@ -230,9 +258,10 @@ class LLMEngine:
             return None
         action = str(payload.get("action", "")).strip().lower()
         text = str(payload.get("text", "")).strip()
+        reasoning = str(payload.get("reasoning", "")).strip()
         if action not in {"question", "guess"}:
             return None
         if not text:
             return None
-        return BobAction(action=action, text=text)
+        return BobAction(action=action, text=text, reasoning=reasoning)
     

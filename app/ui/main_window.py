@@ -16,6 +16,10 @@ from PIL import Image
 
 from app.audio.sound_manager import SoundManager
 from app.config import (
+    BOB_ANSWER_STRATEGY,
+    BOB_ENABLED,
+    BOB_QUESTION_STRATEGY,
+    BOB_TRAIT,
     CONTEXT_WINDOW,
     MODEL_API_KEY,
     MODEL_BASE_URL,
@@ -78,6 +82,10 @@ class TurtleSoupApp(ctk.CTk):
         self._story_epoch = 0
         self._menu_layer = 1
         self._chat_row = 0
+        self._turn_count = 0  # Total Q&A turns (player + Bob)
+        self._sidebar_labels: list[str] = []
+        self._bob_question_count = 0
+        self._bob_guess_count = 0
         self._startup_active = False
         self._startup_step = 0
         self._startup_overlay: ctk.CTkFrame | None = None
@@ -85,7 +93,13 @@ class TurtleSoupApp(ctk.CTk):
         self._startup_status_label: ctk.CTkLabel | None = None
         self._audio_env_warning_shown = False
         available_families = {name.lower() for name in tkfont.families(self)}
-        family = "helvetica" if "helvetica" in available_families else "fixed"
+        # Prefer Chinese-supporting fonts on Windows
+        for preferred in ["microsoft yahei", "simhei", "simsun", "helvetica"]:
+            if preferred in available_families:
+                family = preferred
+                break
+        else:
+            family = "fixed"
         self.base_font = ctk.CTkFont(family=family, size=BASE_FONT_SIZE)
         self.status_font = ctk.CTkFont(family=family, size=STATUS_FONT_SIZE)
         self.title_font = ctk.CTkFont(family=family, size=TITLE_FONT_SIZE, weight="bold")
@@ -177,14 +191,32 @@ class TurtleSoupApp(ctk.CTk):
             text_color="#fef3c7",
             justify="left",
             wraplength=1020,
-            fg_color="#253044",
+            fg_color="#253044" if BOB_ENABLED else "#1a1a2e",
             image=self.pixel_images.get("bob_avatar"),
             compound="left",
             corner_radius=8,
             padx=16,
             pady=12,
         )
+        self.menu_bob_bubble.bind("<Button-1>", lambda e: self._toggle_bob_from_menu())
+        self.menu_bob_bubble.bind("<Enter>", lambda e: self._on_bob_bubble_enter())
+        self.menu_bob_bubble.bind("<Leave>", lambda e: self._on_bob_bubble_leave())
         self.menu_bob_bubble.grid(row=1, column=0, sticky="w", pady=(8, 0))
+
+        # Bob attributes gear button (next to Bob bubble)
+        self.menu_bob_gear = ctk.CTkButton(
+            self.menu_bubble_wrap,
+            text="⚙",
+            width=32,
+            height=32,
+            font=ctk.CTkFont(size=16),
+            fg_color="#253044",
+            hover_color="#2a3a54",
+            text_color="#fef3c7",
+            corner_radius=6,
+            command=self._show_bob_attributes_page,
+        )
+        self.menu_bob_gear.grid(row=1, column=1, sticky="w", pady=(8, 0), padx=(8, 0))
 
         self.menu_action_button = ctk.CTkButton(
             self.menu_screen,
@@ -219,9 +251,22 @@ class TurtleSoupApp(ctk.CTk):
         )
         self.story_manage_button.grid(row=4, column=0, padx=24, pady=(8, 20), sticky="w")
 
+        self.menu_back_button = ctk.CTkButton(
+            self.menu_screen,
+            text=UI["game_back_to_menu"],
+            command=self._back_to_menu_layer_one,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
+        )
+        self.menu_back_button.grid(row=5, column=0, padx=24, pady=(0, 20), sticky="w")
+        self.menu_back_button.grid_remove()
+
         # Story management screen
         self.story_manage_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
         self.story_manage_screen.grid(row=0, column=0, sticky="nsew")
+        self.story_manage_screen.grid_remove()
         self.story_manage_screen.grid_columnconfigure(0, weight=1)
         self.story_manage_screen.grid_rowconfigure(1, weight=1)
 
@@ -262,10 +307,67 @@ class TurtleSoupApp(ctk.CTk):
         )
         self.story_manage_add_button.pack(side="left", padx=(12, 0))
 
+        # Bob attributes screen
+        self.bob_attr_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
+        self.bob_attr_screen.grid(row=0, column=0, sticky="nsew")
+        self.bob_attr_screen.grid_remove()
+        self.bob_attr_screen.grid_columnconfigure(0, weight=1)
+        self.bob_attr_screen.grid_rowconfigure(1, weight=1)
+
+        self._build_bob_attributes_screen()
+
         self.game_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
         self.game_screen.grid(row=0, column=0, sticky="nsew")
+        self.game_screen.grid_remove()
         self.game_screen.grid_columnconfigure(0, weight=1)
+        self.game_screen.grid_columnconfigure(1, weight=0)
         self.game_screen.grid_rowconfigure(1, weight=1)
+
+        # Right sidebar for turn info
+        self.game_sidebar = ctk.CTkFrame(
+            self.game_screen,
+            fg_color="#2b2046",
+            border_width=2,
+            border_color="#5b4b8a",
+            corner_radius=10,
+            width=180,
+        )
+        self.game_sidebar.grid(row=0, column=1, rowspan=4, padx=(0, 12), pady=(10, 16), sticky="ns")
+        self.game_sidebar.grid_propagate(False)
+
+        self.sidebar_title = ctk.CTkLabel(
+            self.game_sidebar,
+            text="回合记录",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            text_color="#fef3c7",
+        )
+        self.sidebar_title.pack(pady=(16, 8))
+
+        self.sidebar_turns = ctk.CTkScrollableFrame(self.game_sidebar, fg_color="transparent")
+        self.sidebar_turns.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        self.sidebar_turn_label = ctk.CTkLabel(
+            self.game_sidebar,
+            text="第 0 轮",
+            font=ctk.CTkFont(size=14),
+            text_color="#a78bfa",
+        )
+        self.sidebar_turn_label.pack(pady=(0, 12))
+
+        # Bob stats display (in-game)
+        self.bob_stats_frame = ctk.CTkFrame(self.game_sidebar, fg_color="#1a1a2e", corner_radius=8)
+        self.bob_stats_frame.pack(pady=(0, 8), padx=8, fill="x")
+        self.bob_stats_frame.pack_forget()
+
+        self.bob_stats_label = ctk.CTkLabel(
+            self.bob_stats_frame,
+            text="",
+            font=ctk.CTkFont(size=11),
+            text_color="#a78bfa",
+            justify="left",
+            wraplength=160,
+        )
+        self.bob_stats_label.pack(padx=8, pady=8)
 
         self.story_header = ctk.CTkFrame(
             self.game_screen,
@@ -396,6 +498,221 @@ class TurtleSoupApp(ctk.CTk):
         import subprocess
         import sys
         subprocess.Popen([sys.executable, sys.argv[0]])
+
+    def _toggle_bob_from_menu(self) -> None:
+        self.sounds.play("click")
+        global BOB_ENABLED
+        BOB_ENABLED = not BOB_ENABLED
+        import os
+        os.environ["TS_BOB_ENABLED"] = "true" if BOB_ENABLED else "false"
+        # Update menu bob bubble appearance
+        if BOB_ENABLED:
+            self.menu_bob_bubble.configure(
+                fg_color="#253044",
+                text=UI["menu_bob_intro"],
+            )
+        else:
+            self.menu_bob_bubble.configure(
+                fg_color="#1a1a2e",
+                text=UI["menu_bob_intro"],
+            )
+
+    def _on_bob_bubble_enter(self) -> None:
+        current = self.menu_bob_bubble.cget("fg_color")
+        if current == "#253044":
+            self.menu_bob_bubble.configure(fg_color="#2a3a54")
+        elif current == "#1a1a2e":
+            self.menu_bob_bubble.configure(fg_color="#252540")
+
+    def _on_bob_bubble_leave(self) -> None:
+        if BOB_ENABLED:
+            self.menu_bob_bubble.configure(fg_color="#253044")
+        else:
+            self.menu_bob_bubble.configure(fg_color="#1a1a2e")
+
+    def _build_bob_attributes_screen(self) -> None:
+        """Build the separate Bob attributes page."""
+        # Header
+        header = ctk.CTkLabel(
+            self.bob_attr_screen,
+            text="Bob 属性",
+            font=self.title_font,
+            text_color="#fef3c7",
+        )
+        header.grid(row=0, column=0, padx=24, pady=(20, 10), sticky="w")
+
+        # Main content area
+        content = ctk.CTkFrame(self.bob_attr_screen, fg_color="#2b2046", corner_radius=12)
+        content.grid(row=1, column=0, padx=24, pady=(0, 16), sticky="nsew")
+        content.grid_columnconfigure(0, weight=1)
+        content.grid_rowconfigure(0, weight=1)
+
+        # Avatar on left
+        avatar_frame = ctk.CTkFrame(content, fg_color="transparent")
+        avatar_frame.grid(row=0, column=0, padx=(40, 20), pady=40, sticky="n")
+        avatar_label = ctk.CTkLabel(
+            avatar_frame,
+            text="",
+            image=self.pixel_images.get("bob_avatar"),
+        )
+        avatar_label.pack()
+
+        # Settings on right
+        settings_frame = ctk.CTkFrame(content, fg_color="transparent")
+        settings_frame.grid(row=0, column=1, padx=(0, 40), pady=40, sticky="nsew")
+
+        # Name
+        name_label = ctk.CTkLabel(
+            settings_frame,
+            text="名称: BOB",
+            font=ctk.CTkFont(size=28),
+            text_color="#fef3c7",
+        )
+        name_label.pack(anchor="w", pady=(0, 30))
+
+        # Question strategy slider
+        q_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        q_frame.pack(fill="x", pady=10)
+        ctk.CTkLabel(
+            q_frame, text="提问策略: 谨慎",
+            font=ctk.CTkFont(size=18),
+            text_color="#c7d2fe",
+        ).pack(side="left")
+        self.bob_q_slider = ctk.CTkSlider(
+            q_frame,
+            from_=1, to=10, number_of_steps=9,
+            width=300,
+            progress_color="#4a7cc9",
+            button_color="#6b9fd4",
+            button_hover_color="#8bb8e0",
+        )
+        self.bob_q_slider.pack(side="left", padx=12)
+        self.bob_q_slider.set(BOB_QUESTION_STRATEGY)
+        ctk.CTkLabel(
+            q_frame, text="跳越",
+            font=ctk.CTkFont(size=18),
+            text_color="#c7d2fe",
+        ).pack(side="left")
+
+        # Answer strategy slider
+        a_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        a_frame.pack(fill="x", pady=10)
+        ctk.CTkLabel(
+            a_frame, text="回答策略: 保守",
+            font=ctk.CTkFont(size=18),
+            text_color="#c7d2fe",
+        ).pack(side="left")
+        self.bob_a_slider = ctk.CTkSlider(
+            a_frame,
+            from_=1, to=10, number_of_steps=9,
+            width=300,
+            progress_color="#4a7cc9",
+            button_color="#6b9fd4",
+            button_hover_color="#8bb8e0",
+        )
+        self.bob_a_slider.set(BOB_ANSWER_STRATEGY)
+        self.bob_a_slider.pack(side="left", padx=12)
+        ctk.CTkLabel(
+            a_frame, text="激进",
+            font=ctk.CTkFont(size=18),
+            text_color="#c7d2fe",
+        ).pack(side="left")
+
+        # Trait slider (villain / normal / genius)
+        trait_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        trait_frame.pack(fill="x", pady=(20, 10))
+        ctk.CTkLabel(
+            trait_frame, text="特性: 坏蛋",
+            font=ctk.CTkFont(size=18),
+            text_color="#c7d2fe",
+        ).pack(side="left")
+        self.bob_trait_slider = ctk.CTkSlider(
+            trait_frame,
+            from_=1, to=3, number_of_steps=2,
+            width=200,
+            progress_color="#4a7cc9",
+            button_color="#6b9fd4",
+            button_hover_color="#8bb8e0",
+        )
+        self.bob_trait_slider.pack(side="left", padx=12)
+        current_val = {"villain": 1.0, "normal": 2.0, "genius": 3.0}.get(BOB_TRAIT, 2.0)
+        self.bob_trait_slider.set(current_val)
+        ctk.CTkLabel(
+            trait_frame, text="天才",
+            font=ctk.CTkFont(size=18),
+            text_color="#c7d2fe",
+        ).pack(side="left")
+
+        # Bottom: back button
+        bottom_frame = ctk.CTkFrame(self.bob_attr_screen, fg_color="transparent")
+        bottom_frame.grid(row=2, column=0, padx=24, pady=(10, 20), sticky="w")
+
+        self.bob_attr_back_button = ctk.CTkButton(
+            bottom_frame,
+            text="返回",
+            command=self._back_to_menu_from_bob_attr,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
+        )
+        self.bob_attr_back_button.pack(side="left")
+
+    def _show_bob_attributes_page(self) -> None:
+        self.sounds.play("click")
+        self.menu_screen.grid_remove()
+        self.story_manage_screen.grid_remove()
+        self.game_screen.grid_remove()
+        self.bob_attr_screen.tkraise()
+        self.bob_attr_screen.grid()
+        # Update sliders to current values
+        self.bob_q_slider.set(BOB_QUESTION_STRATEGY)
+        self.bob_a_slider.set(BOB_ANSWER_STRATEGY)
+        trait_val = {"villain": 1.0, "normal": 2.0, "genius": 3.0}.get(BOB_TRAIT, 2.0)
+        self.bob_trait_slider.set(trait_val)
+
+    def _back_to_menu_from_bob_attr(self) -> None:
+        self.sounds.play("click")
+        # Save values
+        global BOB_QUESTION_STRATEGY, BOB_ANSWER_STRATEGY, BOB_TRAIT
+        BOB_QUESTION_STRATEGY = int(self.bob_q_slider.get())
+        BOB_ANSWER_STRATEGY = int(self.bob_a_slider.get())
+        trait_val = int(self.bob_trait_slider.get())
+        trait_map = {1: "villain", 2: "normal", 3: "genius"}
+        BOB_TRAIT = trait_map.get(trait_val, "normal")
+        import os
+        os.environ["TS_BOB_QUESTION_STRATEGY"] = str(BOB_QUESTION_STRATEGY)
+        os.environ["TS_BOB_ANSWER_STRATEGY"] = str(BOB_ANSWER_STRATEGY)
+        os.environ["TS_BOB_TRAIT"] = BOB_TRAIT
+
+        self.bob_attr_screen.grid_remove()
+        self._show_menu_layer_one()
+
+    def _show_bob_attributes(self) -> None:
+        """Show Bob's in-game stats in the sidebar."""
+        self.sounds.play("click")
+        if self.bob_stats_frame.winfo_viewable():
+            self.bob_stats_frame.pack_forget()
+            return
+
+        if self.session.story is None:
+            self.bob_stats_label.configure(text="暂无游戏数据")
+        else:
+            status = "已退场" if self.session.bob_crying else "活跃中"
+            q_desc = "谨慎" if BOB_QUESTION_STRATEGY <= 3 else ("一般" if BOB_QUESTION_STRATEGY <= 7 else "跳越")
+            a_desc = "保守" if BOB_ANSWER_STRATEGY <= 3 else ("一般" if BOB_ANSWER_STRATEGY <= 7 else "激进")
+            trait_label = {"villain": "坏蛋", "normal": "正常", "genius": "天才"}.get(BOB_TRAIT, "正常")
+            self.bob_stats_label.configure(
+                text=(
+                    f"状态: {status}\n"
+                    f"提问数: {self._bob_question_count}\n"
+                    f"猜测数: {self._bob_guess_count}\n"
+                    f"提问策略: {q_desc} ({BOB_QUESTION_STRATEGY}/10)\n"
+                    f"回答策略: {a_desc} ({BOB_ANSWER_STRATEGY}/10)\n"
+                    f"特性: {trait_label}"
+                )
+            )
+        self.bob_stats_frame.pack(pady=(0, 8), padx=8, fill="x")
 
     def _load_pixel_assets(self) -> None:
         self._load_richer_background()
@@ -648,10 +965,18 @@ class TurtleSoupApp(ctk.CTk):
     def _open_story_management(self) -> None:
         self.sounds.play("click")
         self._render_story_manage_buttons()
+        self.menu_screen.grid_remove()
+        self.bob_attr_screen.grid_remove()
+        self.game_screen.grid_remove()
+        self.story_manage_screen.grid()
         self.story_manage_screen.tkraise()
 
     def _back_to_menu(self) -> None:
         self.sounds.play("click")
+        self.story_manage_screen.grid_remove()
+        self.bob_attr_screen.grid_remove()
+        self.game_screen.grid_remove()
+        self.menu_screen.grid()
         self.menu_screen.tkraise()
 
     def _open_custom_story_dialog_from_manage(self) -> None:
@@ -671,6 +996,7 @@ class TurtleSoupApp(ctk.CTk):
 
     def _show_menu_layer_one(self) -> None:
         self._menu_layer = 1
+        self.menu_screen.grid()
         self.menu_screen.tkraise()
         self.story_title_label.grid_remove()
         self.story_list_frame.grid_remove()
@@ -679,10 +1005,15 @@ class TurtleSoupApp(ctk.CTk):
         self.menu_bubble.configure(
             text=UI["menu_soupie_intro"]
         )
-        self.menu_bob_bubble.grid()
-        self.menu_bob_bubble.configure(
-            text=UI["menu_bob_intro"]
-        )
+        if BOB_ENABLED:
+            self.menu_bob_bubble.grid()
+            self.menu_bob_bubble.configure(
+                text=UI["menu_bob_intro"]
+            )
+            self.menu_bob_gear.grid()
+        else:
+            self.menu_bob_bubble.grid_remove()
+            self.menu_bob_gear.grid_remove()
 
     def _go_to_story_layer(self) -> None:
         self.sounds.play("click")
@@ -690,11 +1021,17 @@ class TurtleSoupApp(ctk.CTk):
 
     def _show_menu_layer_two(self, first_prompt: bool = False) -> None:
         self._menu_layer = 2
+        self.story_manage_screen.grid_remove()
+        self.bob_attr_screen.grid_remove()
+        self.game_screen.grid_remove()
+        self.menu_screen.grid()
         self.menu_screen.tkraise()
         self.menu_action_button.grid_remove()
         self.story_title_label.grid()
         self.story_list_frame.grid()
         self.menu_bob_bubble.grid_remove()
+        self.menu_bob_gear.grid_remove()
+        self.menu_back_button.grid()
         if not self.stories:
             prompt = UI["menu_no_stories"]
         elif first_prompt:
@@ -705,7 +1042,13 @@ class TurtleSoupApp(ctk.CTk):
         if self.stories:
             self.status_label.configure(text=UI["status_choose_story"])
 
+    def _back_to_menu_layer_one(self) -> None:
+        self.sounds.play("click")
+        self._show_menu_layer_one()
+        self.menu_back_button.grid_remove()
+
     def _show_game_screen(self) -> None:
+        self.game_screen.grid()
         self.game_screen.tkraise()
         self.back_to_menu_button.grid_remove()
         self._set_player_controls(True)
@@ -722,8 +1065,13 @@ class TurtleSoupApp(ctk.CTk):
         story = self.stories[self.selected_story_index]
         self.session.start_story(story)
         self._story_epoch += 1
+        self._turn_count = 0
+        self._bob_question_count = 0
+        self._bob_guess_count = 0
         self._clear_chat_bubbles()
+        self._clear_sidebar_turns()
         self._set_story_header(story)
+        self._update_sidebar_turn_label()
         self._append_bubble(
             UI["speaker_soupy"],
             UI["bubble_story"],
@@ -799,7 +1147,8 @@ class TurtleSoupApp(ctk.CTk):
             return
         self.session.add_qa(question, answer)
         self._append_bubble("Soupy", answer, role="agent")
-        if self.session.bob_can_act():
+        self._add_sidebar_turn(f"玩家: {question[:30]}...", "#60a5fa")
+        if BOB_ENABLED and self.session.bob_can_act():
             self._start_bob_turn()
         else:
             self._set_thinking(False)
@@ -815,7 +1164,13 @@ class TurtleSoupApp(ctk.CTk):
         self.status_label.configure(text=UI["dialog_bob_thinking"])
         request_epoch = self._story_epoch
 
+        # Answer strategy affects Bob's response speed (1=slow, 10=fast)
+        # Map 1-10 to delay: 1 -> 3s, 10 -> 0.3s
+        bob_delay = max(0.3, 3.3 - 0.3 * BOB_ANSWER_STRATEGY)
+
         def worker() -> None:
+            import time
+            time.sleep(bob_delay)
             story = self.session.story
             if story is None:
                 self.after(
@@ -824,7 +1179,15 @@ class TurtleSoupApp(ctk.CTk):
                 )
                 return
             try:
-                action = self.llm.generate_bob_action(surface=story.surface, history=self.session.history)
+                action = self.llm.generate_bob_action(
+                    surface=story.surface,
+                    bottom=story.bottom if BOB_TRAIT != "normal" else None,
+                    history=self.session.history,
+                    turn_count=self._turn_count,
+                    question_strategy=BOB_QUESTION_STRATEGY,
+                    answer_strategy=BOB_ANSWER_STRATEGY,
+                    trait=BOB_TRAIT,
+                )
             except OpenAIError:
                 self.after(
                     0,
@@ -883,6 +1246,9 @@ class TurtleSoupApp(ctk.CTk):
             return
 
         self.session.to_bob_guessing()
+        # Show Bob's reasoning before the guess
+        if action.reasoning:
+            self._append_bubble("Bob", f"[思考] {action.reasoning}", role="bob")
         self._append_bubble("Bob", f"Final guess: {action.text}", role="bob")
         self.status_label.configure(text=UI["status_judging_bob"])
         request_epoch = self._story_epoch
@@ -917,7 +1283,9 @@ class TurtleSoupApp(ctk.CTk):
             self._finish_bob_turn()
             return
         self.session.add_qa(question, answer)
+        self._bob_question_count += 1
         self._append_bubble("Soupy", answer, role="agent")
+        self._add_sidebar_turn(f"Bob: {question[:30]}...", "#34d399")
         self.status_label.configure(text=UI["status_next_question"])
         self._finish_bob_turn()
 
@@ -930,9 +1298,11 @@ class TurtleSoupApp(ctk.CTk):
             self.sounds.play("success")
         else:
             self.sounds.play("fail")
-        self._append_bubble("Soupy", f"Bob's theory scored {result.score}/100. {comment}", role="agent")
 
         if success:
+            self._bob_guess_count += 1
+            self._append_bubble("Soupy", f"Bob's theory scored {result.score}/100. {comment}", role="agent")
+            self._add_sidebar_turn(f"Bob 猜测: {result.score}分", "#34d399")
             self.status_label.configure(text=UI["status_bob_cracked"])
             self.session.state = GameState.IDLE
             full_story = self.session.story.bottom
@@ -947,6 +1317,9 @@ class TurtleSoupApp(ctk.CTk):
             self._set_thinking(False)
             return
 
+        # Bob guessed wrong - no score, no story reveal
+        self._bob_guess_count += 1
+        self._add_sidebar_turn("Bob 猜测错误", "#f87171")
         self.session.mark_bob_crying()
         self._append_bubble("Bob", "I'll step back to reassess. Please continue your line of questioning.", role="bob")
         self.status_label.configure(text=UI["status_bob_reassess"])
@@ -1018,6 +1391,7 @@ class TurtleSoupApp(ctk.CTk):
         else:
             self.sounds.play("fail")
         self._append_bubble("Judge", f"{verdict} (match score {result.score}/100) {result.comment}", role="agent")
+        self._add_sidebar_turn(f"玩家猜测: {result.score}分", "#f87171" if not success else "#34d399")
         if success:
             self.status_label.configure(text=UI["status_player_solved"])
             self.session.state = GameState.IDLE
@@ -1454,6 +1828,36 @@ Requirements:
             canvas.configure(scrollregion=bbox)
         canvas.yview_moveto(1.0)
 
+    def _clear_sidebar_turns(self) -> None:
+        for widget in self.sidebar_turns.winfo_children():
+            widget.destroy()
+        self._sidebar_labels.clear()
+
+    def _update_sidebar_turn_label(self) -> None:
+        self.sidebar_turn_label.configure(text=f"第 {self._turn_count} 轮")
+
+    def _add_sidebar_turn(self, label: str, color: str = "#a78bfa") -> None:
+        self._turn_count += 1
+        self._sidebar_labels.append(label)
+        turn_frame = ctk.CTkFrame(self.sidebar_turns, fg_color="transparent")
+        turn_frame.pack(fill="x", pady=2)
+        ctk.CTkLabel(
+            turn_frame,
+            text=f"{self._turn_count}. {label}",
+            font=ctk.CTkFont(size=12),
+            text_color=color,
+            anchor="w",
+        ).pack(fill="x")
+        self._update_sidebar_turn_label()
+        # Auto-scroll sidebar to bottom
+        canvas = getattr(self.sidebar_turns, "_parent_canvas", None)
+        if canvas is not None:
+            canvas.update_idletasks()
+            bbox = canvas.bbox("all")
+            if bbox is not None:
+                canvas.configure(scrollregion=bbox)
+            canvas.yview_moveto(1.0)
+
     def _append_bubble(self, speaker: str, text: str, role: str) -> None:
         self.sounds.play_message(role)
         is_user = role == "user"
@@ -1523,7 +1927,7 @@ Requirements:
             text=speaker,
             justify="left",
             anchor="w",
-            wraplength=760,
+            wraplength=370,
             text_color=speaker_color,
             font=self.base_font,
             image=avatar,
@@ -1534,7 +1938,7 @@ Requirements:
             text=text,
             justify="left",
             anchor="w",
-            wraplength=760,
+            wraplength=370,
             text_color=message_color,
             font=self.base_font,
         ).pack(padx=14, pady=(0, 10), fill="x")

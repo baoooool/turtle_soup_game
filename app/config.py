@@ -14,3 +14,9 @@ MODEL_API_KEY = os.getenv("TS_API_KEY", "local-key")
 MODEL_NAME = os.getenv("TS_MODEL", "qwen2.5:7b-instruct")
 MODEL_TEMPERATURE = float(os.getenv("TS_TEMPERATURE", "0.2"))
 CONTEXT_WINDOW = int(os.getenv("TS_CONTEXT_WINDOW", "8"))
+BOB_ENABLED = os.getenv("TS_BOB_ENABLED", "true").lower() == "true"
+
+# Bob personality attributes (1-10 scale)
+BOB_QUESTION_STRATEGY = int(os.getenv("TS_BOB_QUESTION_STRATEGY", "5"))  # 1=谨慎, 10=跳越
+BOB_ANSWER_STRATEGY = int(os.getenv("TS_BOB_ANSWER_STRATEGY", "5"))  # 1=保守, 10=激进
+BOB_TRAIT = os.getenv("TS_BOB_TRAIT", "normal")  # villain / normal / genius

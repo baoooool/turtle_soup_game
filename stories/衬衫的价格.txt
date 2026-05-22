@@ -1,0 +1,17 @@
+[Title_zh]
+衬衫的价格
+
+[Surface_zh]
+衬衫的价格是多少
+
+[Bottom_zh]
+九磅十五便士
+
+[Title_en]
+The Price of the Shirt
+
+[Surface_en]
+How much is the shirt?
+
+[Bottom_en]
+Nine pounds fifteen.
