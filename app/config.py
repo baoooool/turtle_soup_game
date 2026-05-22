@@ -14,3 +14,4 @@ MODEL_API_KEY = os.getenv("TS_API_KEY", "local-key")
 MODEL_NAME = os.getenv("TS_MODEL", "qwen2.5:7b-instruct")
 MODEL_TEMPERATURE = float(os.getenv("TS_TEMPERATURE", "0.2"))
 CONTEXT_WINDOW = int(os.getenv("TS_CONTEXT_WINDOW", "8"))
+BOB_ENABLED = os.getenv("TS_BOB_ENABLED", "true").lower() == "true"

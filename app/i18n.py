@@ -17,7 +17,9 @@ Do not reveal any part of the bottom."""
     BOB_SYSTEM_PROMPT = """You are Bob, a rational player in a Turtle Soup game.
 Based on the surface and history, generate a JSON action:
 {"action": "question", "text": "..."} or {"action": "guess", "text": "..."}
-Ask elimination questions or make a final guess."""
+Ask elimination questions or make a final guess.
+IMPORTANT: Your questions MUST be answerable with only "Yes", "No", or "Irrelevant". Do NOT ask open-ended questions like "why", "how", "what happened". Only ask questions that can be answered with yes/no.
+When you have asked enough questions (5+ rounds) and feel confident about the answer, make a final guess instead of asking more questions."""
 
     BOB_JUDGE_SYSTEM_PROMPT = """You are a judge for Bob's guess in a Turtle Soup game.
 Score the guess against the bottom truth. Return JSON:
@@ -38,7 +40,9 @@ else:
     BOB_SYSTEM_PROMPT = """你是 Bob，海龟汤游戏中的理性玩家。
 根据汤面和历史问答，生成一个 JSON 动作：
 {"action": "question", "text": "..."} 或 {"action": "guess", "text": "..."}
-提出排除性问题或做出最终猜测。"""
+提出排除性问题或做出最终猜测。
+重要：你的问题必须能用"是"、"不是"或"没有关系"来回答。不要问"为什么"、"怎么"、"发生了什么"等开放式问题。只问可以用是/否回答的问题。
+当你已经问了足够多的问题（5轮以上）且对答案有把握时，做出最终猜测而不是继续提问。"""
 
     BOB_JUDGE_SYSTEM_PROMPT = """你是 Bob 猜测的裁判。
 根据汤底对 Bob 的猜测进行评分。返回 JSON：
@@ -94,7 +98,7 @@ if _LANG == "en":
         "game_question_placeholder": "Ask anything to uncover the truth...",
         "game_send": "Send",
         "game_final_guess": "Final Guess",
-        "game_back_to_menu": "Back to Story Menu",
+        "game_back_to_menu": "Back",
         "game_thinking": ["Thinking   ", "Thinking.  ", "Thinking.. ", "Thinking..."],
 
         # Dialog
@@ -173,6 +177,11 @@ if _LANG == "en":
         "lang_toggle": "中文",
         "lang_label": "Language:",
         "lang_restart_notice": "Language will be set to {lang}. The app will restart.",
+        "bob_toggle_on": "Bob: ON",
+        "bob_toggle_off": "Bob: OFF",
+        "bob_label": "Bob Companion",
+        "bob_disabled_notice": "Bob is disabled and will no longer participate.",
+        "bob_enabled_notice": "Bob is enabled and will play with you.",
     }
 else:
     UI = {
@@ -214,7 +223,7 @@ else:
         "game_question_placeholder": "提问来揭开真相...",
         "game_send": "发送",
         "game_final_guess": "最终猜测",
-        "game_back_to_menu": "返回故事菜单",
+        "game_back_to_menu": "返回",
         "game_thinking": ["思考中   ", "思考中.  ", "思考中.. ", "思考中..."],
 
         # Dialog
@@ -293,6 +302,11 @@ else:
         "lang_toggle": "EN",
         "lang_label": "语言设置",
         "lang_restart_notice": "语言将切换为 {lang}，应用将重新启动。",
+        "bob_toggle_on": "Bob: 开启",
+        "bob_toggle_off": "Bob: 关闭",
+        "bob_label": "Bob 陪玩",
+        "bob_disabled_notice": "Bob 已关闭，将不再参与游戏。",
+        "bob_enabled_notice": "Bob 已开启，将与你一起推理。",
     }
 
 __all__ = [

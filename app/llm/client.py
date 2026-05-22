@@ -127,11 +127,13 @@ class LLMEngine:
             guess_label="Bob Guess",
         )
 
-    def generate_bob_action(self, *, surface: str, history: list[QAItem]) -> BobAction:
+    def generate_bob_action(self, *, surface: str, history: list[QAItem], turn_count: int = 0) -> BobAction:
         context_block = self._build_context_lines(history)
+        turn_info = f"\n[Current round: {turn_count} total Q&A rounds completed. If 5+ rounds, consider making a final guess.]\n"
         user_prompt = (
             f"[{UI['prompt_surface']}]\n{surface}\n\n"
-            f"[{UI['prompt_history']}]\n{context_block}\n\n"
+            f"[{UI['prompt_history']}]\n{context_block}\n"
+            f"{turn_info}"
             f"{UI['prompt_json_only']}"
         )
 
