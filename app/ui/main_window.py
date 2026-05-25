@@ -719,30 +719,44 @@ class TurtleSoupApp(ctk.CTk):
             text_color="#c7d2fe",
         ).pack(side="left")
 
-        # Trait slider (villain / normal / genius)
+        # Trait segmented control (villain / normal / genius)
         trait_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
         trait_frame.pack(fill="x", pady=(20, 10))
         ctk.CTkLabel(
-            trait_frame, text="特性: 坏蛋",
+            trait_frame, text="特性:",
             font=ctk.CTkFont(size=18),
             text_color="#c7d2fe",
-        ).pack(side="left")
-        self.bob_trait_slider = ctk.CTkSlider(
-            trait_frame,
-            from_=1, to=3, number_of_steps=2,
-            width=200,
-            progress_color="#4a7cc9",
-            button_color="#6b9fd4",
-            button_hover_color="#8bb8e0",
-        )
-        self.bob_trait_slider.pack(side="left", padx=12)
-        current_val = {"villain": 1.0, "normal": 2.0, "genius": 3.0}.get(BOB_TRAIT, 2.0)
-        self.bob_trait_slider.set(current_val)
-        ctk.CTkLabel(
-            trait_frame, text="天才",
-            font=ctk.CTkFont(size=18),
-            text_color="#c7d2fe",
-        ).pack(side="left")
+        ).pack(side="left", padx=(0, 16))
+
+        # Create segmented control container
+        trait_segment_frame = ctk.CTkFrame(trait_frame, fg_color="#3a2f5c", corner_radius=8, height=44)
+        trait_segment_frame.pack(side="left")
+        trait_segment_frame.pack_propagate(False)
+
+        trait_options = [
+            ("坏蛋", "villain"),
+            ("普通", "normal"),
+            ("天才", "genius"),
+        ]
+        self._bob_trait_buttons: dict[str, ctk.CTkButton] = {}
+        self._bob_trait_selected = BOB_TRAIT
+
+        for i, (label, value) in enumerate(trait_options):
+            is_selected = value == self._bob_trait_selected
+            btn = ctk.CTkButton(
+                trait_segment_frame,
+                text=label,
+                width=100,
+                height=40,
+                font=ctk.CTkFont(size=20, weight="bold"),
+                fg_color="#e8833a" if is_selected else "transparent",
+                hover_color="#e8833a" if is_selected else "#4a3f6c",
+                text_color="#ffffff" if is_selected else "#8a8a9a",
+                corner_radius=6,
+                command=lambda v=value: self._set_bob_trait(v),
+            )
+            btn.pack(side="left", padx=2, pady=2)
+            self._bob_trait_buttons[value] = btn
 
         # Bottom: back button
         bottom_frame = ctk.CTkFrame(self.bob_attr_screen, fg_color="transparent")
@@ -759,6 +773,17 @@ class TurtleSoupApp(ctk.CTk):
         )
         self.bob_attr_back_button.pack(side="left")
 
+    def _set_bob_trait(self, value: str) -> None:
+        """Update Bob's trait selection and update button styles."""
+        self._bob_trait_selected = value
+        for trait_val, btn in self._bob_trait_buttons.items():
+            is_selected = trait_val == value
+            btn.configure(
+                fg_color="#e8833a" if is_selected else "transparent",
+                hover_color="#e8833a" if is_selected else "#4a3f6c",
+                text_color="#ffffff" if is_selected else "#8a8a9a",
+            )
+
     def _show_bob_attributes_page(self) -> None:
         self.sounds.play("click")
         self.menu_screen.grid_remove()
@@ -769,8 +794,7 @@ class TurtleSoupApp(ctk.CTk):
         # Update sliders to current values
         self.bob_q_slider.set(BOB_QUESTION_STRATEGY)
         self.bob_a_slider.set(BOB_ANSWER_STRATEGY)
-        trait_val = {"villain": 1.0, "normal": 2.0, "genius": 3.0}.get(BOB_TRAIT, 2.0)
-        self.bob_trait_slider.set(trait_val)
+        self._set_bob_trait(BOB_TRAIT)
 
     def _back_to_menu_from_bob_attr(self) -> None:
         self.sounds.play("click")
@@ -778,9 +802,7 @@ class TurtleSoupApp(ctk.CTk):
         global BOB_QUESTION_STRATEGY, BOB_ANSWER_STRATEGY, BOB_TRAIT
         BOB_QUESTION_STRATEGY = int(self.bob_q_slider.get())
         BOB_ANSWER_STRATEGY = int(self.bob_a_slider.get())
-        trait_val = int(self.bob_trait_slider.get())
-        trait_map = {1: "villain", 2: "normal", 3: "genius"}
-        BOB_TRAIT = trait_map.get(trait_val, "normal")
+        BOB_TRAIT = self._bob_trait_selected
         import os
         os.environ["TS_BOB_QUESTION_STRATEGY"] = str(BOB_QUESTION_STRATEGY)
         os.environ["TS_BOB_ANSWER_STRATEGY"] = str(BOB_ANSWER_STRATEGY)
