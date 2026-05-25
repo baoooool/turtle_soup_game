@@ -2290,7 +2290,7 @@ Requirements:
     # ── Voice input ─────────────────────────────────────────────────────────
 
     def _start_voice_input(self) -> None:
-        """Start voice recognition and insert result into question entry."""
+        """Start voice recognition in a background thread."""
         self.sounds.play("click")
         try:
             import speech_recognition as sr
@@ -2302,37 +2302,46 @@ Requirements:
             return
 
         self.voice_button.configure(text="🎤", fg_color="#e8833a")
-        self.update()
+        self.status_label.configure(text="正在聆听...")
 
-        try:
-            recognizer = sr.Recognizer()
-            with sr.Microphone() as source:
-                self.status_label.configure(text="正在聆听...")
-                self.update()
-                audio = recognizer.listen(source, timeout=5, phrase_time_limit=15)
+        import threading
 
-            self.status_label.configure(text="正在识别...")
-            self.update()
-
-            # Try Chinese first, then English
+        def _recognize() -> None:
             try:
-                text = recognizer.recognize_google(audio, language="zh-CN")
-            except sr.UnknownValueError:
-                try:
-                    text = recognizer.recognize_google(audio, language="en-US")
-                except sr.UnknownValueError:
-                    messagebox.showinfo(UI["dialog_notice"], "未能识别语音,请重试。")
-                    return
+                recognizer = sr.Recognizer()
+                with sr.Microphone() as source:
+                    audio = recognizer.listen(source, timeout=5, phrase_time_limit=15)
 
+                # Try Chinese first, then English
+                try:
+                    text = recognizer.recognize_google(audio, language="zh-CN")
+                except sr.UnknownValueError:
+                    try:
+                        text = recognizer.recognize_google(audio, language="en-US")
+                    except sr.UnknownValueError:
+                        self.after(0, lambda: self._voice_done(None, "未能识别语音,请重试。"))
+                        return
+
+                self.after(0, lambda: self._voice_done(text, None))
+
+            except sr.WaitTimeoutError:
+                self.after(0, lambda: self._voice_done(None, "未检测到语音输入,请重试。"))
+            except sr.RequestError as e:
+                self.after(0, lambda: self._voice_done(None, f"语音识别服务错误: {e}"))
+            except Exception as e:
+                self.after(0, lambda: self._voice_done(None, f"语音输入错误: {e}"))
+
+        threading.Thread(target=_recognize, daemon=True).start()
+
+    def _voice_done(self, text: str | None, error: str | None) -> None:
+        """Handle voice recognition result on the main thread."""
+        self.voice_button.configure(text="🎤", fg_color="#4a3f6c")
+        self.status_label.configure(text=UI["status_ready"])
+
+        if error:
+            messagebox.showinfo(UI["dialog_notice"], error)
+            return
+
+        if text:
             self.question_entry.delete(0, tk.END)
             self.question_entry.insert(0, text)
-
-        except sr.WaitTimeoutError:
-            messagebox.showinfo(UI["dialog_notice"], "未检测到语音输入,请重试。")
-        except sr.RequestError as e:
-            messagebox.showerror(UI["dialog_notice"], f"语音识别服务错误: {e}")
-        except Exception as e:
-            messagebox.showerror(UI["dialog_notice"], f"语音输入错误: {e}")
-        finally:
-            self.voice_button.configure(text="🎤", fg_color="#4a3f6c")
-            self.status_label.configure(text=UI["status_ready"])
