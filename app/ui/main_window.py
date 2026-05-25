@@ -28,8 +28,10 @@ from app.config import (
     PROJECT_ROOT,
     SFX_DIR,
     STORIES_DIR,
+    USER_DATA_PATH,
 )
 from app.data.story_loader import Story, load_stories
+from app.data.user_manager import UserManager, UserProfile
 from app.game.manager import GameSession
 from app.game.state import GameState
 from app.i18n import LANGUAGE, UI
@@ -75,6 +77,10 @@ class TurtleSoupApp(ctk.CTk):
             max_retries=3,
         )
         self.sounds = SoundManager(SFX_DIR)
+        self.user_manager = UserManager(
+            USER_DATA_PATH,
+            default_bob_avatar="bob",
+        )
         self.stories: list[Story] = []
         self.selected_story_index: int | None = None
         self.is_thinking = False
@@ -229,6 +235,17 @@ class TurtleSoupApp(ctk.CTk):
         )
         self.menu_action_button.grid(row=1, column=0, padx=24, pady=(2, 12), sticky="w")
 
+        self.player_select_button = ctk.CTkButton(
+            self.menu_screen,
+            text=UI["player_choose"],
+            command=self._go_to_player_screen,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
+        )
+        self.player_select_button.grid(row=2, column=0, padx=24, pady=(2, 8), sticky="w")
+
         self.story_title_label = ctk.CTkLabel(
             self.menu_screen,
             text=UI["menu_choose"],
@@ -251,6 +268,17 @@ class TurtleSoupApp(ctk.CTk):
         )
         self.story_manage_button.grid(row=4, column=0, padx=24, pady=(8, 20), sticky="w")
 
+        self.leaderboard_button = ctk.CTkButton(
+            self.menu_screen,
+            text=UI["leaderboard_title"],
+            command=self._go_to_leaderboard,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
+        )
+        self.leaderboard_button.grid(row=5, column=0, padx=24, pady=(0, 8), sticky="w")
+
         self.menu_back_button = ctk.CTkButton(
             self.menu_screen,
             text=UI["game_back_to_menu"],
@@ -260,7 +288,7 @@ class TurtleSoupApp(ctk.CTk):
             compound="left",
             **self._pixel_button_style(primary=False),
         )
-        self.menu_back_button.grid(row=5, column=0, padx=24, pady=(0, 20), sticky="w")
+        self.menu_back_button.grid(row=6, column=0, padx=24, pady=(0, 20), sticky="w")
         self.menu_back_button.grid_remove()
 
         # Story management screen
@@ -306,6 +334,79 @@ class TurtleSoupApp(ctk.CTk):
             **self._pixel_button_style(primary=True),
         )
         self.story_manage_add_button.pack(side="left", padx=(12, 0))
+
+        # Player selection screen
+        self.player_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
+        self.player_screen.grid(row=0, column=0, sticky="nsew")
+        self.player_screen.grid_remove()
+        self.player_screen.grid_columnconfigure(0, weight=1)
+        self.player_screen.grid_rowconfigure(2, weight=1)
+
+        self.player_title_label = ctk.CTkLabel(
+            self.player_screen,
+            text=UI["player_choose"],
+            font=self.title_font,
+            text_color="#fef3c7",
+        )
+        self.player_title_label.grid(row=0, column=0, padx=24, pady=(20, 6), sticky="w")
+        self.player_hint_label = ctk.CTkLabel(
+            self.player_screen,
+            text=UI["player_hint"],
+            font=self.status_font,
+            text_color="#c7d2fe",
+        )
+        self.player_hint_label.grid(row=1, column=0, padx=24, pady=(0, 10), sticky="w")
+
+        self.player_list_frame = ctk.CTkScrollableFrame(self.player_screen, width=940)
+        self.player_list_frame.grid(row=2, column=0, padx=24, pady=(0, 16), sticky="nsew")
+        self.player_list_frame.configure(fg_color="#2b2046")
+
+        self.player_action_row = ctk.CTkFrame(self.player_screen, fg_color="transparent")
+        self.player_action_row.grid(row=3, column=0, padx=24, pady=(0, 20), sticky="ew")
+        self.player_action_row.grid_columnconfigure(0, weight=1)
+        self.create_user_button = ctk.CTkButton(
+            self.player_action_row,
+            text=UI["player_create"],
+            command=self._create_user_flow,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=True),
+        )
+        self.create_user_button.pack(side="right")
+
+        # Leaderboard screen
+        self.leaderboard_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
+        self.leaderboard_screen.grid(row=0, column=0, sticky="nsew")
+        self.leaderboard_screen.grid_remove()
+        self.leaderboard_screen.grid_columnconfigure(0, weight=1)
+        self.leaderboard_screen.grid_rowconfigure(1, weight=1)
+
+        self.leaderboard_title_label = ctk.CTkLabel(
+            self.leaderboard_screen,
+            text=UI["leaderboard_title"],
+            font=self.title_font,
+            text_color="#fef3c7",
+        )
+        self.leaderboard_title_label.grid(row=0, column=0, padx=24, pady=(20, 10), sticky="w")
+
+        self.leaderboard_list_frame = ctk.CTkScrollableFrame(self.leaderboard_screen, width=940)
+        self.leaderboard_list_frame.grid(row=1, column=0, padx=24, pady=(0, 16), sticky="nsew")
+        self.leaderboard_list_frame.configure(fg_color="#2b2046")
+
+        self.leaderboard_action_row = ctk.CTkFrame(self.leaderboard_screen, fg_color="transparent")
+        self.leaderboard_action_row.grid(row=2, column=0, padx=24, pady=(0, 20), sticky="ew")
+        self.leaderboard_action_row.grid_columnconfigure(0, weight=1)
+        self.leaderboard_back_button = ctk.CTkButton(
+            self.leaderboard_action_row,
+            text=UI["leaderboard_back"],
+            command=self._back_from_leaderboard,
+            font=self.base_font,
+            image=self.pixel_images.get("button_icon"),
+            compound="left",
+            **self._pixel_button_style(primary=False),
+        )
+        self.leaderboard_back_button.pack(side="right")
 
         # Bob attributes screen
         self.bob_attr_screen = ctk.CTkFrame(self.screen_stack, fg_color="#231a3a", border_width=2, border_color="#5b4b8a")
@@ -1392,6 +1493,14 @@ class TurtleSoupApp(ctk.CTk):
             self.sounds.play("fail")
         self._append_bubble("Judge", f"{verdict} (match score {result.score}/100) {result.comment}", role="agent")
         self._add_sidebar_turn(f"玩家猜测: {result.score}分", "#f87171" if not success else "#34d399")
+
+        # Record score for the active player
+        if self.session.player_name:
+            try:
+                self.session.apply_final_score(self.user_manager, result.score)
+            except RuntimeError:
+                pass  # No active player, skip scoring
+
         if success:
             self.status_label.configure(text=UI["status_player_solved"])
             self.session.state = GameState.IDLE
@@ -1947,3 +2056,199 @@ Requirements:
         canvas = getattr(self.chat_stream, "_parent_canvas", None)
         if canvas is not None:
             self.after(20, self._scroll_chat_to_bottom)
+
+    # ── Player selection & leaderboard ──────────────────────────────────────
+
+    def _go_to_player_screen(self) -> None:
+        self.sounds.play("click")
+        self.menu_screen.grid_remove()
+        self.player_screen.grid()
+        self._refresh_player_list()
+
+    def _show_player_screen(self) -> None:
+        self.menu_screen.grid_remove()
+        self.player_screen.grid()
+        self._refresh_player_list()
+
+    def _go_to_leaderboard(self) -> None:
+        self.sounds.play("click")
+        self.menu_screen.grid_remove()
+        self.leaderboard_screen.grid()
+        self._refresh_leaderboard()
+
+    def _show_leaderboard_screen(self) -> None:
+        self.menu_screen.grid_remove()
+        self.leaderboard_screen.grid()
+        self._refresh_leaderboard()
+
+    def _back_from_leaderboard(self) -> None:
+        self.sounds.play("click")
+        self.leaderboard_screen.grid_remove()
+        self.menu_screen.grid()
+
+    def _refresh_player_list(self) -> None:
+        for widget in self.player_list_frame.winfo_children():
+            widget.destroy()
+
+        users = self.user_manager.list_users()
+        if not users:
+            ctk.CTkLabel(
+                self.player_list_frame,
+                text=UI["leaderboard_empty"],
+                font=self.base_font,
+                text_color="#c7d2fe",
+            ).pack(pady=40)
+            return
+
+        for user in users:
+            row = ctk.CTkFrame(self.player_list_frame, fg_color="#2b2046")
+            row.pack(fill="x", padx=8, pady=4)
+
+            ctk.CTkLabel(
+                row,
+                text=user.name,
+                font=self.base_font,
+                text_color="#fef3c7",
+                anchor="w",
+            ).pack(side="left", padx=16, pady=10)
+
+            ctk.CTkLabel(
+                row,
+                text=f'{UI["leaderboard_score"]}: {user.total_score}',
+                font=ctk.CTkFont(size=16),
+                text_color="#a78bfa",
+                anchor="w",
+            ).pack(side="left", padx=16, pady=10)
+
+            if user.name.casefold() != "bob":
+                ctk.CTkButton(
+                    row,
+                    text=UI["player_select"],
+                    width=100,
+                    command=lambda name=user.name: self._select_user(name),
+                    font=ctk.CTkFont(size=14),
+                    **self._pixel_button_style(primary=True),
+                ).pack(side="right", padx=8)
+
+                ctk.CTkButton(
+                    row,
+                    text=UI["player_delete"],
+                    width=80,
+                    command=lambda name=user.name: self._delete_user(name),
+                    font=ctk.CTkFont(size=14),
+                    fg_color="#dc2626",
+                    hover_color="#ef4444",
+                    text_color="#fef3c7",
+                    corner_radius=6,
+                ).pack(side="right", padx=8)
+
+    def _create_user_flow(self) -> None:
+        self.sounds.play("click")
+        self._prompt_new_user()
+
+    def _prompt_new_user(self) -> None:
+        dialog = ctk.CTkToplevel(self)
+        dialog.title(UI["player_create_title"])
+        dialog.geometry("500x300")
+        dialog.transient(self)
+        dialog.grab_set()
+
+        ctk.CTkLabel(
+            dialog,
+            text=UI["player_name_label"],
+            font=self.base_font,
+        ).pack(pady=(20, 4))
+
+        name_entry = ctk.CTkEntry(
+            dialog,
+            placeholder_text=UI["player_name_placeholder"],
+            font=self.base_font,
+            width=300,
+        )
+        name_entry.pack(pady=(0, 16))
+
+        def on_create() -> None:
+            name = name_entry.get().strip()
+            if not name:
+                messagebox.showwarning(UI["dialog_notice"], UI["player_name_empty"])
+                return
+            try:
+                profile = self.user_manager.add_user(name, "default")
+                messagebox.showinfo(UI["dialog_notice"], UI["player_created"].format(name=name))
+                dialog.destroy()
+                self._refresh_player_list()
+            except ValueError:
+                messagebox.showwarning(UI["dialog_notice"], UI["player_name_exists"])
+
+        ctk.CTkButton(
+            dialog,
+            text=UI["dialog_submit"],
+            command=on_create,
+            font=self.base_font,
+            **self._pixel_button_style(primary=True),
+        ).pack(pady=16)
+
+        name_entry.focus_set()
+        name_entry.bind("<Return>", lambda _e: on_create())
+
+    def _select_user(self, name: str) -> None:
+        self.sounds.play("click")
+        self.session.set_player(name)
+        self.player_screen.grid_remove()
+        self._show_menu_layer_one()
+
+    def _delete_user(self, name: str) -> None:
+        if messagebox.askyesno(
+            UI["dialog_notice"],
+            UI["player_delete_confirm"].format(player=name),
+        ):
+            try:
+                self.user_manager.delete_user(name)
+                messagebox.showinfo(UI["dialog_notice"], UI["player_deleted"])
+                self._refresh_player_list()
+            except ValueError as e:
+                messagebox.showwarning(UI["dialog_notice"], str(e))
+
+    def _refresh_leaderboard(self) -> None:
+        for widget in self.leaderboard_list_frame.winfo_children():
+            widget.destroy()
+
+        users = self.user_manager.leaderboard()
+        if not users:
+            ctk.CTkLabel(
+                self.leaderboard_list_frame,
+                text=UI["leaderboard_empty"],
+                font=self.base_font,
+                text_color="#c7d2fe",
+            ).pack(pady=40)
+            return
+
+        for i, user in enumerate(users, 1):
+            row = ctk.CTkFrame(self.leaderboard_list_frame, fg_color="#2b2046")
+            row.pack(fill="x", padx=8, pady=4)
+
+            ctk.CTkLabel(
+                row,
+                text=f'{UI["leaderboard_rank"]} {i}',
+                font=ctk.CTkFont(size=16, weight="bold"),
+                text_color="#fef3c7",
+                width=80,
+                anchor="w",
+            ).pack(side="left", padx=16, pady=10)
+
+            ctk.CTkLabel(
+                row,
+                text=user.name,
+                font=self.base_font,
+                text_color="#fef3c7",
+                anchor="w",
+            ).pack(side="left", padx=16, pady=10)
+
+            ctk.CTkLabel(
+                row,
+                text=str(user.total_score),
+                font=ctk.CTkFont(size=18, weight="bold"),
+                text_color="#a78bfa",
+                width=80,
+                anchor="e",
+            ).pack(side="right", padx=16, pady=10)

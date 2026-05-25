@@ -152,6 +152,31 @@ if _LANG == "en":
         "story_management_back": "Back",
         "story_management_add": "Add New Story",
 
+        # Player profiles
+        "player_choose": "Choose Your Player",
+        "player_hint": "Select an existing profile or create a new one to continue.",
+        "player_create": "Create New Player",
+        "player_back": "Back to Player Select",
+        "player_select": "Select",
+        "player_delete": "Delete",
+        "player_name_label": "Player Name",
+        "player_name_placeholder": "Enter player name...",
+        "player_avatar_label": "Avatar",
+        "player_create_title": "Create New Player",
+        "player_created": "Player '{name}' created!",
+        "player_delete_confirm": "Are you sure you want to delete '{player}'?",
+        "player_deleted": "Player deleted.",
+        "player_cannot_delete_bob": "Bob cannot be deleted.",
+        "player_name_exists": "Player name already exists.",
+        "player_name_empty": "Player name cannot be empty.",
+
+        # Leaderboard
+        "leaderboard_title": "Leaderboard",
+        "leaderboard_back": "Back to Story Menu",
+        "leaderboard_rank": "Rank",
+        "leaderboard_score": "Score",
+        "leaderboard_empty": "No players yet.",
+
         # Bubble messages
         "speaker_soupy": "Soupy",
         "speaker_bob": "Bob",
@@ -276,6 +301,31 @@ else:
         "story_management_deleted": "故事已删除。",
         "story_management_back": "返回",
         "story_management_add": "添加新故事",
+
+        # Player profiles
+        "player_choose": "选择你的玩家",
+        "player_hint": "选择现有档案或创建新玩家以继续。",
+        "player_create": "创建新玩家",
+        "player_back": "返回玩家选择",
+        "player_select": "选择",
+        "player_delete": "删除",
+        "player_name_label": "玩家名称",
+        "player_name_placeholder": "输入玩家名称...",
+        "player_avatar_label": "头像",
+        "player_create_title": "创建新玩家",
+        "player_created": "玩家'{name}'已创建！",
+        "player_delete_confirm": "确定要删除'{player}'吗？",
+        "player_deleted": "玩家已删除。",
+        "player_cannot_delete_bob": "Bob 不能被删除。",
+        "player_name_exists": "玩家名称已存在。",
+        "player_name_empty": "玩家名称不能为空。",
+
+        # Leaderboard
+        "leaderboard_title": "排行榜",
+        "leaderboard_back": "返回故事菜单",
+        "leaderboard_rank": "排名",
+        "leaderboard_score": "分数",
+        "leaderboard_empty": "还没有玩家。",
 
         # Bubble messages
         "speaker_soupy": "Soupy",

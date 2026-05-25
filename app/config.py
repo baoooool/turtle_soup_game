@@ -5,6 +5,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STORIES_DIR = PROJECT_ROOT / "stories"
 AUDIO_RES_DIR = PROJECT_ROOT / "audio_res"
 SFX_DIR = AUDIO_RES_DIR
+USER_DATA_PATH = PROJECT_ROOT / "user_profiles.json"
 
 # Language: "zh" for Chinese, "en" for English
 LANGUAGE = os.getenv("TS_LANGUAGE", "zh").lower()
