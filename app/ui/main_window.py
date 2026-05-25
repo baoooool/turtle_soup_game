@@ -2290,8 +2290,15 @@ Requirements:
     # ── Voice input ─────────────────────────────────────────────────────────
 
     def _start_voice_input(self) -> None:
-        """Start voice recognition in a background thread."""
+        """Start voice recognition in a background thread, or cancel if already recording."""
         self.sounds.play("click")
+
+        # If already recording, cancel
+        if getattr(self, "_voice_recording", False):
+            self._voice_cancel_flag.set()
+            self._voice_button_reset()
+            return
+
         try:
             import speech_recognition as sr
         except ImportError:
@@ -2301,16 +2308,40 @@ Requirements:
             )
             return
 
-        self.voice_button.configure(text="🎤", fg_color="#e8833a")
-        self.status_label.configure(text="正在聆听...")
-
         import threading
+
+        self._voice_recording = True
+        self._voice_cancel_flag = threading.Event()
+        self.voice_button.configure(text="⏹️", fg_color="#dc2626")
+        self.status_label.configure(text="正在聆听... (再次点击取消)")
 
         def _recognize() -> None:
             try:
                 recognizer = sr.Recognizer()
                 with sr.Microphone() as source:
-                    audio = recognizer.listen(source, timeout=5, phrase_time_limit=15)
+                    # Use a queue to get audio or cancellation
+                    import queue
+                    audio_queue: queue.Queue[sr.AudioData | None] = queue.Queue()
+
+                    def _listen() -> None:
+                        try:
+                            audio = recognizer.listen(source, timeout=5, phrase_time_limit=15)
+                            audio_queue.put(audio)
+                        except Exception:
+                            audio_queue.put(None)
+
+                    listen_thread = threading.Thread(target=_listen, daemon=True)
+                    listen_thread.start()
+
+                    # Wait for audio or cancellation
+                    try:
+                        audio = audio_queue.get(timeout=20)
+                    except queue.Empty:
+                        audio = None
+
+                    if self._voice_cancel_flag.is_set() or audio is None:
+                        self.after(0, lambda: self._voice_done(None, None))  # Cancelled, no message
+                        return
 
                 # Try Chinese first, then English
                 try:
@@ -2330,13 +2361,23 @@ Requirements:
                 self.after(0, lambda: self._voice_done(None, f"语音识别服务错误: {e}"))
             except Exception as e:
                 self.after(0, lambda: self._voice_done(None, f"语音输入错误: {e}"))
+            finally:
+                self._voice_recording = False
 
         threading.Thread(target=_recognize, daemon=True).start()
 
-    def _voice_done(self, text: str | None, error: str | None) -> None:
-        """Handle voice recognition result on the main thread."""
+    def _voice_button_reset(self) -> None:
+        """Reset voice button to idle state."""
         self.voice_button.configure(text="🎤", fg_color="#4a3f6c")
         self.status_label.configure(text=UI["status_ready"])
+        self._voice_recording = False
+
+    def _voice_done(self, text: str | None, error: str | None) -> None:
+        """Handle voice recognition result on the main thread."""
+        self._voice_button_reset()
+
+        if error is None and text is None:
+            return  # Cancelled, no message
 
         if error:
             messagebox.showinfo(UI["dialog_notice"], error)
