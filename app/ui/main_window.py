@@ -729,9 +729,8 @@ class TurtleSoupApp(ctk.CTk):
         ).pack(side="left", padx=(0, 16))
 
         # Create segmented control container
-        trait_segment_frame = ctk.CTkFrame(trait_frame, fg_color="#3a2f5c", corner_radius=8, height=44)
+        trait_segment_frame = ctk.CTkFrame(trait_frame, fg_color="#3a2f5c", corner_radius=8)
         trait_segment_frame.pack(side="left")
-        trait_segment_frame.pack_propagate(False)
 
         trait_options = [
             ("坏蛋", "villain"),
