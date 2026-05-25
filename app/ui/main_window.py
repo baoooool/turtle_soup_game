@@ -1230,6 +1230,21 @@ class TurtleSoupApp(ctk.CTk):
         if not question:
             return
 
+        # Check if question is a valid sentence
+        import re
+        # Remove punctuation and whitespace, check content length
+        content = re.sub(r'[^\w\u4e00-\u9fff]', '', question)
+        if len(content) < 3:
+            # Too short to be a valid question, treat as irrelevant directly
+            self.question_entry.delete(0, tk.END)
+            self._append_bubble("You", question, role="user")
+            self.session.add_qa(question, "Irrelevant")
+            self._append_bubble("Soupy", UI["answer_irrelevant"], role="agent")
+            self._add_sidebar_turn(f"玩家: {question[:30]}...", "#60a5fa")
+            if BOB_ENABLED and self.session.bob_can_act():
+                self._start_bob_turn()
+            return
+
         self.question_entry.delete(0, tk.END)
         self.sounds.play("thinking")
         self._append_bubble("You", question, role="user")
