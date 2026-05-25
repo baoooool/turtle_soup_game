@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Literal
 
+from app.data.user_manager import UserManager
+
 from app.data.story_loader import Story
 from app.game.state import GameState
 
@@ -21,6 +23,7 @@ class GameSession:
     history: list[QAItem] = field(default_factory=list)
     context_window: int = 8
     bob_crying: bool = False
+    player_name: str | None = None
 
     def reset(self) -> None:
         self.story = None
@@ -74,3 +77,11 @@ class GameSession:
             raise RuntimeError("Cannot update Bob's mood without a story.")
         self.bob_crying = True
         self.state = GameState.BOB_CRYING
+
+    def set_player(self, name: str | None) -> None:
+        self.player_name = name
+
+    def apply_final_score(self, user_manager: UserManager, score: int) -> None:
+        if not self.player_name:
+            raise RuntimeError("No active player selected for scoring.")
+        user_manager.add_score(self.player_name, score)

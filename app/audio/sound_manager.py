@@ -29,6 +29,7 @@ class SoundManager:
         self.last_error: str | None = None
         self.sounds: dict[str, pygame.mixer.Sound] = {}
         self.channels: dict[str, pygame.mixer.Channel] = {}
+        self.priority_effects = {"click", "success", "fail"}
 
     def initialize(self) -> None:
         selected_driver = self._initialize_mixer()
@@ -67,6 +68,12 @@ class SoundManager:
                     os.environ["SDL_AUDIODRIVER"] = driver
                 for buffer_size in preferred_buffers:
                     try:
+                        pygame.mixer.pre_init(
+                            frequency=44100,
+                            size=-16,
+                            channels=2,
+                            buffer=buffer_size,
+                        )
                         pygame.mixer.init(
                             frequency=44100,
                             size=-16,
@@ -95,6 +102,7 @@ class SoundManager:
             "startup": 7,
             "message_bob": 8,
         }
+        pygame.mixer.set_reserved(len(channel_map))
         self.channels.clear()
         for name, index in channel_map.items():
             if name in self.sounds:
@@ -136,6 +144,11 @@ class SoundManager:
         sound = self.sounds.get(name)
         if sound:
             channel = self.channels.get(name)
+            if name in self.priority_effects:
+                if channel is not None:
+                    channel.stop()
+                else:
+                    sound.stop()
             if channel is not None:
                 channel.play(sound)
             else:

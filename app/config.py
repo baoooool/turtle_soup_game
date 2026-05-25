@@ -5,6 +5,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 STORIES_DIR = PROJECT_ROOT / "stories"
 AUDIO_RES_DIR = PROJECT_ROOT / "audio_res"
 SFX_DIR = AUDIO_RES_DIR
+USER_DATA_PATH = PROJECT_ROOT / "user_profiles.json"
 
 MODEL_BASE_URL = os.getenv("TS_BASE_URL", "http://127.0.0.1:11434/v1")
 MODEL_API_KEY = os.getenv("TS_API_KEY", "local-key")
