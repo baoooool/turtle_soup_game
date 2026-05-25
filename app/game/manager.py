@@ -83,4 +83,13 @@ class GameSession:
     def apply_final_score(self, user_manager: UserManager, score: int) -> None:
         if not self.player_name:
             raise RuntimeError("No active player selected for scoring.")
-        user_manager.add_score(self.player_name, score)
+        rounds = len(self.history)
+        # Apply round coefficient: 1.0 for <=10 rounds, linearly decreases to 0.8 at 30 rounds
+        if rounds <= 10:
+            coefficient = 1.0
+        elif rounds >= 30:
+            coefficient = 0.8
+        else:
+            coefficient = 1.0 - (rounds - 10) * 0.01  # Linear decrease from 1.0 to 0.8
+        adjusted_score = int(score * coefficient)
+        user_manager.add_score(self.player_name, adjusted_score)
