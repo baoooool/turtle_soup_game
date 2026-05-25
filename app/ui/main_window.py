@@ -1232,10 +1232,11 @@ class TurtleSoupApp(ctk.CTk):
 
         # Check if question is a valid sentence
         import re
-        # Remove punctuation and whitespace, check content length
-        content = re.sub(r'[^\w\u4e00-\u9fff]', '', question)
-        if len(content) < 3:
-            # Too short to be a valid question, treat as irrelevant directly
+        # Check for meaningful content: Chinese characters or English letters
+        has_chinese = bool(re.search(r'[\u4e00-\u9fff]', question))
+        has_english = bool(re.search(r'[a-zA-Z]', question))
+        if not has_chinese and not has_english:
+            # No meaningful words (pure numbers, symbols, etc.), treat as irrelevant
             self.question_entry.delete(0, tk.END)
             self._append_bubble("You", question, role="user")
             self.session.add_qa(question, "Irrelevant")
@@ -1527,15 +1528,17 @@ class TurtleSoupApp(ctk.CTk):
             self.sounds.play("success")
         else:
             self.sounds.play("fail")
-        self._append_bubble("Judge", f"{verdict} (match score {result.score}/100) {result.comment}", role="agent")
-        self._add_sidebar_turn(f"玩家猜测: {result.score}分", "#f87171" if not success else "#34d399")
-
         # Record score for the active player
         if self.session.player_name:
             try:
-                self.session.apply_final_score(self.user_manager, result.score)
+                adjusted_score = self.session.apply_final_score(self.user_manager, result.score)
             except RuntimeError:
-                pass  # No active player, skip scoring
+                adjusted_score = result.score  # No active player, use original score
+        else:
+            adjusted_score = result.score
+
+        self._append_bubble("Judge", f"{verdict} (match score {adjusted_score}/100) {result.comment}", role="agent")
+        self._add_sidebar_turn(f"玩家猜测: {adjusted_score}分", "#f87171" if not success else "#34d399")
 
         if success:
             self.status_label.configure(text=UI["status_player_solved"])

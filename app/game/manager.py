@@ -80,7 +80,7 @@ class GameSession:
     def set_player(self, name: str | None) -> None:
         self.player_name = name
 
-    def apply_final_score(self, user_manager: UserManager, score: int) -> None:
+    def apply_final_score(self, user_manager: UserManager, score: int) -> int:
         if not self.player_name:
             raise RuntimeError("No active player selected for scoring.")
         rounds = len(self.history)
@@ -92,4 +92,5 @@ class GameSession:
         else:
             coefficient = 1.0 - (rounds - 10) * 0.01  # Linear decrease from 1.0 to 0.8
         adjusted_score = int(score * coefficient)
-        user_manager.add_score(self.player_name, adjusted_score)
+        user_manager.set_score(self.player_name, adjusted_score)
+        return adjusted_score
