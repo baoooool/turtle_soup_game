@@ -2318,30 +2318,26 @@ Requirements:
         def _recognize() -> None:
             try:
                 recognizer = sr.Recognizer()
+                recognizer.energy_threshold = 4000  # Adjust sensitivity
+                recognizer.dynamic_energy_threshold = True
+
                 with sr.Microphone() as source:
-                    # Use a queue to get audio or cancellation
-                    import queue
-                    audio_queue: queue.Queue[sr.AudioData | None] = queue.Queue()
+                    # Adjust for ambient noise
+                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
 
-                    def _listen() -> None:
-                        try:
-                            audio = recognizer.listen(source, timeout=5, phrase_time_limit=15)
-                            audio_queue.put(audio)
-                        except Exception:
-                            audio_queue.put(None)
+                    self.after(0, lambda: self.status_label.configure(text="请说话..."))
 
-                    listen_thread = threading.Thread(target=_listen, daemon=True)
-                    listen_thread.start()
-
-                    # Wait for audio or cancellation
                     try:
-                        audio = audio_queue.get(timeout=20)
-                    except queue.Empty:
-                        audio = None
-
-                    if self._voice_cancel_flag.is_set() or audio is None:
-                        self.after(0, lambda: self._voice_done(None, None))  # Cancelled, no message
+                        audio = recognizer.listen(source, timeout=10, phrase_time_limit=30)
+                    except sr.WaitTimeoutError:
+                        self.after(0, lambda: self._voice_done(None, "未检测到语音,请重试。"))
                         return
+
+                if self._voice_cancel_flag.is_set():
+                    self.after(0, lambda: self._voice_done(None, None))
+                    return
+
+                self.after(0, lambda: self.status_label.configure(text="正在识别..."))
 
                 # Try Chinese first, then English
                 try:
@@ -2352,13 +2348,14 @@ Requirements:
                     except sr.UnknownValueError:
                         self.after(0, lambda: self._voice_done(None, "未能识别语音,请重试。"))
                         return
+                except sr.RequestError as e:
+                    self.after(0, lambda: self._voice_done(None, f"语音识别服务不可用: {e}"))
+                    return
 
                 self.after(0, lambda: self._voice_done(text, None))
 
-            except sr.WaitTimeoutError:
-                self.after(0, lambda: self._voice_done(None, "未检测到语音输入,请重试。"))
-            except sr.RequestError as e:
-                self.after(0, lambda: self._voice_done(None, f"语音识别服务错误: {e}"))
+            except OSError as e:
+                self.after(0, lambda: self._voice_done(None, f"麦克风错误: {e}"))
             except Exception as e:
                 self.after(0, lambda: self._voice_done(None, f"语音输入错误: {e}"))
             finally:
