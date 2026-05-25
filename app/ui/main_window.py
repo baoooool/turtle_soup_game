@@ -2120,16 +2120,16 @@ Requirements:
                 anchor="w",
             ).pack(side="left", padx=16, pady=10)
 
-            if user.name.casefold() != "bob":
-                ctk.CTkButton(
-                    row,
-                    text=UI["player_select"],
-                    width=100,
-                    command=lambda name=user.name: self._select_user(name),
-                    font=ctk.CTkFont(size=14),
-                    **self._pixel_button_style(primary=True),
-                ).pack(side="right", padx=8)
+            ctk.CTkButton(
+                row,
+                text=UI["player_select"],
+                width=100,
+                command=lambda name=user.name: self._select_user(name),
+                font=ctk.CTkFont(size=14),
+                **self._pixel_button_style(primary=True),
+            ).pack(side="right", padx=8)
 
+            if user.name.casefold() != "bob":
                 ctk.CTkButton(
                     row,
                     text=UI["player_delete"],
