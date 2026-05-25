@@ -525,19 +525,6 @@ class TurtleSoupApp(ctk.CTk):
         self.question_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
         self.question_entry.bind("<Return>", lambda _event: self.on_ask_question())
 
-        self.voice_button = ctk.CTkButton(
-            self.action_row,
-            text="",
-            width=50,
-            command=self._start_voice_input,
-            font=ctk.CTkFont(size=20),
-            fg_color="#4a3f6c",
-            hover_color="#6b5f8c",
-            text_color="#fef3c7",
-            corner_radius=8,
-        )
-        self.voice_button.grid(row=0, column=1, padx=(0, 8))
-
         self.ask_button = ctk.CTkButton(
             self.action_row,
             text=UI["game_send"],
@@ -548,7 +535,7 @@ class TurtleSoupApp(ctk.CTk):
             compound="left",
             **self._pixel_button_style(primary=True),
         )
-        self.ask_button.grid(row=0, column=2, padx=(0, 8))
+        self.ask_button.grid(row=0, column=1, padx=(0, 8))
 
         self.guess_button = ctk.CTkButton(
             self.action_row,
@@ -2286,100 +2273,3 @@ Requirements:
                 width=80,
                 anchor="e",
             ).pack(side="right", padx=16, pady=10)
-
-    # ── Voice input ─────────────────────────────────────────────────────────
-
-    def _start_voice_input(self) -> None:
-        """Start voice recognition in a background thread, or cancel if already recording."""
-        self.sounds.play("click")
-
-        # If already recording, cancel
-        if getattr(self, "_voice_recording", False):
-            self._voice_cancel_flag.set()
-            self._voice_button_reset()
-            return
-
-        try:
-            import speech_recognition as sr
-        except ImportError:
-            messagebox.showwarning(
-                UI["dialog_notice"],
-                "语音输入需要安装 speech_recognition 库。\n请运行: pip install SpeechRecognition pyaudio",
-            )
-            return
-
-        import threading
-
-        self._voice_recording = True
-        self._voice_cancel_flag = threading.Event()
-        self.voice_button.configure(text="⏹️", fg_color="#dc2626")
-        self.status_label.configure(text="正在聆听... (再次点击取消)")
-
-        def _recognize() -> None:
-            try:
-                recognizer = sr.Recognizer()
-                recognizer.energy_threshold = 4000  # Adjust sensitivity
-                recognizer.dynamic_energy_threshold = True
-
-                with sr.Microphone() as source:
-                    # Adjust for ambient noise
-                    recognizer.adjust_for_ambient_noise(source, duration=0.5)
-
-                    self.after(0, lambda: self.status_label.configure(text="请说话..."))
-
-                    try:
-                        audio = recognizer.listen(source, timeout=10, phrase_time_limit=30)
-                    except sr.WaitTimeoutError:
-                        self.after(0, lambda: self._voice_done(None, "未检测到语音,请重试。"))
-                        return
-
-                if self._voice_cancel_flag.is_set():
-                    self.after(0, lambda: self._voice_done(None, None))
-                    return
-
-                self.after(0, lambda: self.status_label.configure(text="正在识别..."))
-
-                # Try Chinese first, then English
-                try:
-                    text = recognizer.recognize_google(audio, language="zh-CN")
-                except sr.UnknownValueError:
-                    try:
-                        text = recognizer.recognize_google(audio, language="en-US")
-                    except sr.UnknownValueError:
-                        self.after(0, lambda: self._voice_done(None, "未能识别语音,请重试。"))
-                        return
-                except sr.RequestError as e:
-                    self.after(0, lambda: self._voice_done(None, f"语音识别服务不可用: {e}"))
-                    return
-
-                self.after(0, lambda: self._voice_done(text, None))
-
-            except OSError as e:
-                self.after(0, lambda: self._voice_done(None, f"麦克风错误: {e}"))
-            except Exception as e:
-                self.after(0, lambda: self._voice_done(None, f"语音输入错误: {e}"))
-            finally:
-                self._voice_recording = False
-
-        threading.Thread(target=_recognize, daemon=True).start()
-
-    def _voice_button_reset(self) -> None:
-        """Reset voice button to idle state."""
-        self.voice_button.configure(text="🎤", fg_color="#4a3f6c")
-        self.status_label.configure(text=UI["status_ready"])
-        self._voice_recording = False
-
-    def _voice_done(self, text: str | None, error: str | None) -> None:
-        """Handle voice recognition result on the main thread."""
-        self._voice_button_reset()
-
-        if error is None and text is None:
-            return  # Cancelled, no message
-
-        if error:
-            messagebox.showinfo(UI["dialog_notice"], error)
-            return
-
-        if text:
-            self.question_entry.delete(0, tk.END)
-            self.question_entry.insert(0, text)
