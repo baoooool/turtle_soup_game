@@ -86,6 +86,7 @@ if _LANG == "en":
         "status_bob_reassess": "Bob is stepping back to reassess. Your turn.",
         "status_player_solved": "Amazing! You solved it.",
         "status_player_close": "Nice try. Full story revealed.",
+        "status_ready": "Ready",
 
         # Startup
         "startup_title": "Turtle Soup",
@@ -236,6 +237,7 @@ else:
         "status_bob_reassess": "Bob 正在重新评估。轮到你了。",
         "status_player_solved": "太棒了！你解开了谜题。",
         "status_player_close": "猜得好！完整故事已揭晓。",
+        "status_ready": "准备就绪",
 
         # Startup
         "startup_title": "海龟汤",

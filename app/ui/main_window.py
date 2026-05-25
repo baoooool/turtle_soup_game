@@ -525,6 +525,19 @@ class TurtleSoupApp(ctk.CTk):
         self.question_entry.grid(row=0, column=0, padx=(0, 8), sticky="ew")
         self.question_entry.bind("<Return>", lambda _event: self.on_ask_question())
 
+        self.voice_button = ctk.CTkButton(
+            self.action_row,
+            text="",
+            width=50,
+            command=self._start_voice_input,
+            font=ctk.CTkFont(size=20),
+            fg_color="#4a3f6c",
+            hover_color="#6b5f8c",
+            text_color="#fef3c7",
+            corner_radius=8,
+        )
+        self.voice_button.grid(row=0, column=1, padx=(0, 8))
+
         self.ask_button = ctk.CTkButton(
             self.action_row,
             text=UI["game_send"],
@@ -535,7 +548,7 @@ class TurtleSoupApp(ctk.CTk):
             compound="left",
             **self._pixel_button_style(primary=True),
         )
-        self.ask_button.grid(row=0, column=1, padx=(0, 8))
+        self.ask_button.grid(row=0, column=2, padx=(0, 8))
 
         self.guess_button = ctk.CTkButton(
             self.action_row,
@@ -2273,3 +2286,53 @@ Requirements:
                 width=80,
                 anchor="e",
             ).pack(side="right", padx=16, pady=10)
+
+    # ── Voice input ─────────────────────────────────────────────────────────
+
+    def _start_voice_input(self) -> None:
+        """Start voice recognition and insert result into question entry."""
+        self.sounds.play("click")
+        try:
+            import speech_recognition as sr
+        except ImportError:
+            messagebox.showwarning(
+                UI["dialog_notice"],
+                "语音输入需要安装 speech_recognition 库。\n请运行: pip install SpeechRecognition pyaudio",
+            )
+            return
+
+        self.voice_button.configure(text="🎤", fg_color="#e8833a")
+        self.update()
+
+        try:
+            recognizer = sr.Recognizer()
+            with sr.Microphone() as source:
+                self.status_label.configure(text="正在聆听...")
+                self.update()
+                audio = recognizer.listen(source, timeout=5, phrase_time_limit=15)
+
+            self.status_label.configure(text="正在识别...")
+            self.update()
+
+            # Try Chinese first, then English
+            try:
+                text = recognizer.recognize_google(audio, language="zh-CN")
+            except sr.UnknownValueError:
+                try:
+                    text = recognizer.recognize_google(audio, language="en-US")
+                except sr.UnknownValueError:
+                    messagebox.showinfo(UI["dialog_notice"], "未能识别语音,请重试。")
+                    return
+
+            self.question_entry.delete(0, tk.END)
+            self.question_entry.insert(0, text)
+
+        except sr.WaitTimeoutError:
+            messagebox.showinfo(UI["dialog_notice"], "未检测到语音输入,请重试。")
+        except sr.RequestError as e:
+            messagebox.showerror(UI["dialog_notice"], f"语音识别服务错误: {e}")
+        except Exception as e:
+            messagebox.showerror(UI["dialog_notice"], f"语音输入错误: {e}")
+        finally:
+            self.voice_button.configure(text="🎤", fg_color="#4a3f6c")
+            self.status_label.configure(text=UI["status_ready"])
