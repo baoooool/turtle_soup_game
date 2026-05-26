@@ -1,0 +1,17 @@
+[Title_zh]
+杰凯的冒险
+
+[Surface_zh]
+杨杰凯转身离开了，什么也没说
+
+[Bottom_zh]
+杨杰凯去上厕所了
+
+[Title_en]
+Jie Kai's Adventure
+
+[Surface_en]
+Yang Jie Kai turned around and left without saying a word.
+
+[Bottom_en]
+Yang Jie Kai went to the restroom.

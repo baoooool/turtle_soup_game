@@ -1,0 +1,8 @@
+[Title]
+Ice Water and Poison
+
+[Surface]
+Two men walk into a bar and order two identical glasses of iced whiskey. Man A drinks quickly and leaves; Man B sips slowly and dies of poisoning halfway through. The toxin dose in both drinks is identical. Why was A fine?
+
+[Bottom]
+The poison was in the ice, not the whiskey. A finished before the ice melted, so he never ingested the toxin. B drank slowly, allowing the ice to melt and release the poison into the drink.

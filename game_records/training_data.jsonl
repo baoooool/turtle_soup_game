@@ -1,0 +1,10 @@
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "E"}, {"role": "assistant", "content": "Yes"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "杨杰凯离开时是否显得很紧张？"}, {"role": "assistant", "content": "No"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "他是不是睡着了"}, {"role": "assistant", "content": "No"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "杨杰凯离开时是否看起来有些心事重重？"}, {"role": "assistant", "content": "No"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "我是不是笨笨的"}, {"role": "assistant", "content": "Irrelevant"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "他是不是睡着了"}, {"role": "assistant", "content": "No"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "我喜欢你"}, {"role": "assistant", "content": "Irrelevant"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "真遗憾"}, {"role": "assistant", "content": "Irrelevant"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "请问这是什么意思"}, {"role": "assistant", "content": "No"}]}
+{"messages": [{"role": "system", "content": "你是海龟汤游戏的主持人。难度模式：normal"}, {"role": "user", "content": "他是不是害怕我"}, {"role": "assistant", "content": "No"}]}

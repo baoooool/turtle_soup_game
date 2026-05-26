@@ -1,0 +1,14 @@
+{
+  "users": [
+    {
+      "name": "11",
+      "avatar_path": "Hand.png",
+      "total_score": 0
+    },
+    {
+      "name": "bob",
+      "avatar_path": "DuckBoy.png",
+      "total_score": 100
+    }
+  ]
+}

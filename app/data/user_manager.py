@@ -99,13 +99,13 @@ class UserManager:
         del self.users[key]
         self._save()
 
-    def add_score(self, name: str, score: int) -> None:
+    def set_score(self, name: str, score: int) -> None:
         key = self._find_user_key(name)
         if key is None:
             raise KeyError("User not found.")
         try:
-            delta = int(score)
+            final_score = int(score)
         except (TypeError, ValueError):
-            delta = 0
-        self.users[key].total_score = max(0, self.users[key].total_score + delta)
+            final_score = 0
+        self.users[key].total_score = max(0, final_score)
         self._save()

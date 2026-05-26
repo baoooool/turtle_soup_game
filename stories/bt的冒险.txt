@@ -1,0 +1,17 @@
+[Title_zh]
+bt的冒险
+
+[Surface_zh]
+本涛晚上突然醒来，出了一身冷汗
+
+[Bottom_zh]
+他做恶梦了
+
+[Title_en]
+Bt's Adventure
+
+[Surface_en]
+One night, Bt suddenly woke up in a cold sweat
+
+[Bottom_en]
+He had a nightmare

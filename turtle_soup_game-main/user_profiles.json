@@ -1,0 +1,14 @@
+{
+  "users": [
+    {
+      "name": "1",
+      "avatar_path": "E:\\学\\人工智能\\turtle_soup_game-main\\PixelPete'sArtAssets\\PixelPete'sArtAssets\\GameBoy\\Squirrel.png",
+      "total_score": 20
+    },
+    {
+      "name": "bob",
+      "avatar_path": "E:\\学\\人工智能\\turtle_soup_game-main\\PixelPete'sArtAssets\\PixelPete'sArtAssets\\Sprites\\DuckBoy.png",
+      "total_score": 0
+    }
+  ]
+}

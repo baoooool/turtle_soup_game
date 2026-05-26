@@ -1,0 +1,74 @@
+{
+  "timestamp": "2026-05-26T17:57:20.485590",
+  "story_title": "杰凯的冒险",
+  "story_surface": "杨杰凯转身离开了，什么也没说",
+  "story_bottom": "杨杰凯去上厕所了",
+  "player_name": "Player",
+  "host_difficulty": "normal",
+  "qa_records": [
+    {
+      "question": "E",
+      "answer": "Yes",
+      "turn_number": 1,
+      "player_type": "player"
+    },
+    {
+      "question": "杨杰凯离开时是否显得很紧张？",
+      "answer": "No",
+      "turn_number": 2,
+      "player_type": "player"
+    },
+    {
+      "question": "他是不是睡着了",
+      "answer": "No",
+      "turn_number": 3,
+      "player_type": "player"
+    },
+    {
+      "question": "杨杰凯离开时是否看起来有些心事重重？",
+      "answer": "No",
+      "turn_number": 4,
+      "player_type": "player"
+    },
+    {
+      "question": "我是不是笨笨的",
+      "answer": "Irrelevant",
+      "turn_number": 5,
+      "player_type": "player"
+    },
+    {
+      "question": "他是不是睡着了",
+      "answer": "No",
+      "turn_number": 6,
+      "player_type": "player"
+    },
+    {
+      "question": "我喜欢你",
+      "answer": "Irrelevant",
+      "turn_number": 7,
+      "player_type": "player"
+    },
+    {
+      "question": "真遗憾",
+      "answer": "Irrelevant",
+      "turn_number": 8,
+      "player_type": "player"
+    },
+    {
+      "question": "请问这是什么意思",
+      "answer": "No",
+      "turn_number": 8,
+      "player_type": "player"
+    },
+    {
+      "question": "他是不是害怕我",
+      "answer": "No",
+      "turn_number": 8,
+      "player_type": "player"
+    }
+  ],
+  "total_turns": 10,
+  "bob_won": false,
+  "player_won": false,
+  "final_score": 20
+}

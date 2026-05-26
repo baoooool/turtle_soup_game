@@ -79,7 +79,7 @@ class TurtleSoupApp(ctk.CTk):
         self.sounds = SoundManager(SFX_DIR)
         self.user_manager = UserManager(
             USER_DATA_PATH,
-            default_bob_avatar="bob",
+            default_bob_avatar="DuckBoy.png",
         )
         self.stories: list[Story] = []
         self.selected_story_index: int | None = None
@@ -757,6 +757,45 @@ class TurtleSoupApp(ctk.CTk):
             btn.pack(side="left", padx=2, pady=2)
             self._bob_trait_buttons[value] = btn
 
+        # Host difficulty segmented control (strict / normal / supportive)
+        host_diff_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        host_diff_frame.pack(fill="x", pady=(20, 10))
+        ctk.CTkLabel(
+            host_diff_frame, text="主持人难度:",
+            font=ctk.CTkFont(size=18),
+            text_color="#c7d2fe",
+        ).pack(side="left", padx=(0, 16))
+
+        # Create segmented control container
+        host_diff_segment_frame = ctk.CTkFrame(host_diff_frame, fg_color="#3a2f5c", corner_radius=8)
+        host_diff_segment_frame.pack(side="left")
+
+        from app.llm.config import HOST_DIFFICULTY
+        host_diff_options = [
+            ("严谨", "strict"),
+            ("正常", "normal"),
+            ("支持", "supportive"),
+        ]
+        self._host_diff_buttons: dict[str, ctk.CTkButton] = {}
+        self._host_diff_selected = HOST_DIFFICULTY
+
+        for i, (label, value) in enumerate(host_diff_options):
+            is_selected = value == self._host_diff_selected
+            btn = ctk.CTkButton(
+                host_diff_segment_frame,
+                text=label,
+                width=100,
+                height=40,
+                font=ctk.CTkFont(size=20, weight="bold"),
+                fg_color="#4a7cc9" if is_selected else "transparent",
+                hover_color="#4a7cc9" if is_selected else "#4a3f6c",
+                text_color="#ffffff" if is_selected else "#8a8a9a",
+                corner_radius=6,
+                command=lambda v=value: self._set_host_difficulty(v),
+            )
+            btn.pack(side="left", padx=2, pady=2)
+            self._host_diff_buttons[value] = btn
+
         # Bottom: back button
         bottom_frame = ctk.CTkFrame(self.bob_attr_screen, fg_color="transparent")
         bottom_frame.grid(row=2, column=0, padx=24, pady=(10, 20), sticky="w")
@@ -782,6 +821,41 @@ class TurtleSoupApp(ctk.CTk):
                 hover_color="#e8833a" if is_selected else "#4a3f6c",
                 text_color="#ffffff" if is_selected else "#8a8a9a",
             )
+
+    def _set_host_difficulty(self, value: str) -> None:
+        """Update host difficulty selection and update button styles, then save to config."""
+        self._host_diff_selected = value
+        for diff_val, btn in self._host_diff_buttons.items():
+            is_selected = diff_val == value
+            btn.configure(
+                fg_color="#4a7cc9" if is_selected else "transparent",
+                hover_color="#4a7cc9" if is_selected else "#4a3f6c",
+                text_color="#ffffff" if is_selected else "#8a8a9a",
+            )
+        
+        # Save to config file
+        self._save_host_difficulty(value)
+
+    def _save_host_difficulty(self, difficulty: str) -> None:
+        """Save host difficulty to config file."""
+        import re
+        from pathlib import Path
+        
+        config_file = Path("app/llm/config.py")
+        if not config_file.exists():
+            return
+        
+        content = config_file.read_text(encoding="utf-8")
+        
+        # Replace HOST_DIFFICULTY config
+        new_content = re.sub(
+            r'HOST_DIFFICULTY:\s*Literal\[.*?\]\s*=\s*"\w+"',
+            f'HOST_DIFFICULTY: Literal["strict", "normal", "supportive"] = "{difficulty}"',
+            content
+        )
+        
+        if new_content != content:
+            config_file.write_text(new_content, encoding="utf-8")
 
     def _show_bob_attributes_page(self) -> None:
         self.sounds.play("click")
@@ -1531,11 +1605,18 @@ class TurtleSoupApp(ctk.CTk):
         # Record score for the active player
         if self.session.player_name:
             try:
-                adjusted_score = self.session.apply_final_score(self.user_manager, result.score)
+                adjusted_score, raw_score, rounds, coefficient = self.session.apply_final_score(self.user_manager, result.score)
             except RuntimeError:
-                adjusted_score = result.score  # No active player, use original score
+                adjusted_score = result.score
         else:
-            adjusted_score = result.score
+            rounds = self.session.total_rounds
+            if rounds <= 10:
+                coefficient = 1.0
+            elif rounds >= 30:
+                coefficient = 0.8
+            else:
+                coefficient = 1.0 - (rounds - 10) * 0.01
+            adjusted_score = int(result.score * coefficient)
 
         self._append_bubble("Judge", f"{verdict} (match score {adjusted_score}/100) {result.comment}", role="agent")
         self._add_sidebar_turn(f"玩家猜测: {adjusted_score}分", "#f87171" if not success else "#34d399")
@@ -1548,6 +1629,20 @@ class TurtleSoupApp(ctk.CTk):
             self.session.state = GameState.IDLE
         self._append_bubble("Soupy", f"Here is the full story: {full_story}", role="agent")
         self._append_bubble("Soupy", "Which one would you like to play next? Click Back to Story Menu to continue.", role="agent")
+        # Announce final score at the end (no calculation details)
+        self._append_bubble("Soupy", f"最终得分：{adjusted_score}分", role="agent")
+        
+        # 保存游戏记录
+        try:
+            from app.game.manager import game_recorder
+            game_recorder.end_game(
+                bob_won=False,
+                player_won=success,
+                final_score=adjusted_score
+            )
+        except Exception:
+            pass  # 记录失败不影响游戏
+        
         self._set_player_controls(False)
         self.back_to_menu_button.grid()
         self._set_thinking(False)
@@ -2143,14 +2238,43 @@ Requirements:
             row = ctk.CTkFrame(self.player_list_frame, fg_color="#2b2046")
             row.pack(fill="x", padx=8, pady=4)
 
+            # Load and display avatar on the left
+            avatar_image = None
+            if user.avatar_path:
+                try:
+                    from PIL import Image
+                    avatar_path = PIXEL_SPRITES_DIR / user.avatar_path
+                    print(f"[DEBUG] Loading avatar for {user.name}: {avatar_path}, exists: {avatar_path.exists()}")
+                    if avatar_path.exists():
+                        img = Image.open(avatar_path).convert("RGBA")
+                        # Scale to 32x32 for player list
+                        scaled = img.resize((32, 32), Image.Resampling.NEAREST)
+                        avatar_image = ctk.CTkImage(light_image=scaled, dark_image=scaled, size=(32, 32))
+                        print(f"[DEBUG] Avatar loaded successfully for {user.name}")
+                    else:
+                        print(f"[DEBUG] Avatar path does not exist: {avatar_path}")
+                except Exception as e:
+                    print(f"[DEBUG] Failed to load avatar for {user.name}: {e}")
+
+            # Avatar label (leftmost)
+            if avatar_image:
+                ctk.CTkLabel(
+                    row,
+                    text="",
+                    image=avatar_image,
+                    anchor="w",
+                ).pack(side="left", padx=(16, 8), pady=10)
+
+            # Player name
             ctk.CTkLabel(
                 row,
                 text=user.name,
                 font=self.base_font,
                 text_color="#fef3c7",
                 anchor="w",
-            ).pack(side="left", padx=16, pady=10)
+            ).pack(side="left", padx=8, pady=10)
 
+            # Score
             ctk.CTkLabel(
                 row,
                 text=f'{UI["leaderboard_score"]}: {user.total_score}',
@@ -2159,6 +2283,7 @@ Requirements:
                 anchor="w",
             ).pack(side="left", padx=16, pady=10)
 
+            # Select button (right)
             ctk.CTkButton(
                 row,
                 text=UI["player_select"],
@@ -2168,6 +2293,7 @@ Requirements:
                 **self._pixel_button_style(primary=True),
             ).pack(side="right", padx=8)
 
+            # Delete button (right, except Bob)
             if user.name.casefold() != "bob":
                 ctk.CTkButton(
                     row,
@@ -2188,7 +2314,7 @@ Requirements:
     def _prompt_new_user(self) -> None:
         dialog = ctk.CTkToplevel(self)
         dialog.title(UI["player_create_title"])
-        dialog.geometry("500x300")
+        dialog.geometry("600x650")
         dialog.transient(self)
         dialog.grab_set()
 
@@ -2202,9 +2328,109 @@ Requirements:
             dialog,
             placeholder_text=UI["player_name_placeholder"],
             font=self.base_font,
-            width=300,
+            width=400,
         )
         name_entry.pack(pady=(0, 16))
+
+        ctk.CTkLabel(
+            dialog,
+            text="Choose an avatar",
+            font=self.base_font,
+        ).pack(pady=(10, 4))
+
+        selected_avatar = {"value": "BunnyBoy.png"}
+
+        avatar_frame = ctk.CTkFrame(dialog, fg_color="#1f1635")
+        avatar_frame.pack(pady=(0, 16))
+
+        # Avatar list with actual image file names
+        # For spritesheets: (x, y, width, height)
+        # For single images: None (use entire image)
+        avatars = [
+            ("Bunny Boy", "BunnyBoy.png", None),  # Single image 38x21
+            ("Cat Kid", "CatKid.png", None),      # Single image 31x18
+            ("Duck Boy", "DuckBoy.png", None),    # Single image 25x18
+            ("Fox", "Fox.png", None),             # Single image 16x16
+            ("Cheep Chick", "CheepChick.png", None),  # Single image 25x18
+            ("Bear", "Bear.png", (48, 0, 16, 16)),    # 4th bear (brown) from 64x16 sheet
+            ("Bat", "Bat.png", None),             # Single image 35x21
+            ("Hand", "Hand.png", None),           # Single image 18x25
+            ("Puppy", "Puppies.png", (22, 0, 16, 16)),  # 2nd puppy from sheet
+            ("Star", "Star.png", None),           # Single image 17x19
+            ("Dodgeball", "DodgeballRed.png", None),  # Single image 12x12
+        ]
+
+        def select_avatar(avatar_file: str, btn: ctk.CTkButton) -> None:
+            selected_avatar["value"] = avatar_file
+            for child in avatar_frame.winfo_children():
+                if isinstance(child, ctk.CTkButton):
+                    child.configure(fg_color="#2b2046", hover_color="#3d305c")
+            btn.configure(fg_color="#7c3aed", hover_color="#8b5cf6")
+
+        row = 0
+        col = 0
+        avatar_buttons = []  # Store valid avatar buttons
+        
+        for display_name, avatar_file, crop_rect in avatars:
+            # Try to load the avatar image
+            avatar_path = PIXEL_SPRITES_DIR / avatar_file
+            avatar_image = None
+            if avatar_path.exists():
+                try:
+                    from PIL import Image
+                    img = Image.open(avatar_path).convert("RGBA")
+                    
+                    # Crop if crop_rect is specified, otherwise use entire image
+                    if crop_rect:
+                        cropped = img.crop(crop_rect)
+                    else:
+                        cropped = img
+                    
+                    # Scale up to 48x48 for display (maintain aspect ratio)
+                    # Calculate scaling factor to fit in 48x48 box
+                    max_size = 48
+                    ratio = min(max_size / cropped.width, max_size / cropped.height)
+                    new_size = (int(cropped.width * ratio), int(cropped.height * ratio))
+                    scaled = cropped.resize(new_size, Image.Resampling.NEAREST)
+                    
+                    # Create a 48x48 transparent image and paste the scaled image in center
+                    final_img = Image.new("RGBA", (48, 48), (0, 0, 0, 0))
+                    paste_x = (48 - new_size[0]) // 2
+                    paste_y = (48 - new_size[1]) // 2
+                    final_img.paste(scaled, (paste_x, paste_y), scaled)
+                    
+                    avatar_image = ctk.CTkImage(light_image=final_img, dark_image=final_img, size=(48, 48))
+                    
+                    # Create button with consistent size
+                    btn = ctk.CTkButton(
+                        avatar_frame,
+                        text=display_name,
+                        width=100,
+                        height=90,
+                        font=ctk.CTkFont(size=12),
+                        fg_color="#2b2046",
+                        hover_color="#3d305c",
+                        corner_radius=8,
+                        image=avatar_image,
+                        compound="top",
+                    )
+                    
+                    # Set command separately to avoid lambda closure issue
+                    def make_command(avatar_name, button):
+                        return lambda: select_avatar(avatar_name, button)
+                    
+                    btn.configure(command=make_command(avatar_file, btn))
+                    btn.grid(row=row, column=col, padx=5, pady=5)
+                    avatar_buttons.append(btn)
+                    
+                    col += 1
+                    if col >= 5:
+                        col = 0
+                        row += 1
+                except Exception as e:
+                    print(f"Failed to load avatar {avatar_file}: {e}")
+            else:
+                print(f"Avatar path not found: {avatar_path}")
 
         def on_create() -> None:
             name = name_entry.get().strip()
@@ -2212,7 +2438,7 @@ Requirements:
                 messagebox.showwarning(UI["dialog_notice"], UI["player_name_empty"])
                 return
             try:
-                profile = self.user_manager.add_user(name, "default")
+                profile = self.user_manager.add_user(name, selected_avatar["value"])
                 messagebox.showinfo(UI["dialog_notice"], UI["player_created"].format(name=name))
                 dialog.destroy()
                 self._refresh_player_list()
