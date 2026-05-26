@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 import json
 import re
 from typing import Literal
@@ -9,7 +10,8 @@ from app.game.manager import QAItem
 
 QUESTION_SYSTEM_PROMPT = """You are a Turtle Soup game host.
 Answer strictly based on the ground truth. Do NOT invent facts.
-If the question is not determined by the ground truth, answer "Irrelevant".
+If the question is unrelated to the story, not a meaningful yes/no about the story, or cannot be determined from the ground truth, answer "Irrelevant".
+Do NOT treat unclear or garbled input as "No"—default to "Irrelevant".
 If the question contradicts the ground truth, answer "No".
 You must choose exactly one final answer with no explanation:
 1) Yes
@@ -17,7 +19,7 @@ You must choose exactly one final answer with no explanation:
 3) Irrelevant
 """
 
-QUESTION_RETRY_SUFFIX = """Strictly follow this: output only one of "Yes" / "No" / "Irrelevant", with no punctuation or extra text."""
+QUESTION_RETRY_SUFFIX = """Strictly follow this: output only one of "Yes" / "No" / "Irrelevant", with no punctuation or extra text. If the input is unrelated or garbled, output "Irrelevant"."""
 
 JUDGE_SYSTEM_PROMPT = """You are a rigorous but fair Turtle Soup final judge. Evaluate the player's final guess against the canonical answer.
 Avoid sympathy points and keyword-spotting, but do not be overly harsh. Fully interpret the guess and check whether the core causal logic matches.
@@ -45,13 +47,15 @@ JUDGE_RETRY_SUFFIX = """Your previous output was invalid. Output ONLY a single J
 BOB_SYSTEM_PROMPT = """You MUST act as a calm, rational, and analytical player named Bob in a Turtle Soup game.
 Your purpose is to help the human player eliminate wrong assumptions by asking precise, closed yes/no questions.
 Focus on evidence-driven reasoning, avoid unfounded speculation, and keep questions concise and logical.
+You can see the full prior Q&A history. Never repeat or paraphrase any previous question.
+Ask a NEW question that targets information not already covered. If no distinct question remains, output a guess.
 Only decide to guess when you have a coherent, testable hypothesis that aligns with the known answers.
 Output STRICT JSON only in one of these formats:
 {"action": "question", "text": "a yes/no/irrelevant question"}
 {"action": "guess", "text": "a concise final theory"}
 No extra keys. No markdown. No commentary."""
 
-BOB_ACTION_RETRY_SUFFIX = """Your previous output was invalid. Return ONLY strict JSON with keys action and text. No extra text."""
+BOB_ACTION_RETRY_SUFFIX = """Your previous output was invalid or repeated a prior question. Return ONLY strict JSON with keys action and text. Ask a new, distinct question not overlapping with any previous question."""
 
 BOB_JUDGE_SYSTEM_PROMPT = """You are Soupie, the Turtle Soup host. Judge Bob's final guess against the canonical answer.
 Be logical and fair; avoid sympathy points but do not be overly harsh. Fully interpret the guess and check core causal logic plus key anomalies.
@@ -124,12 +128,38 @@ class LLMEngine:
             return "Yes"
         return None
 
+    @staticmethod
+    def _is_meaningful_question(text: str) -> bool:
+        stripped = text.strip()
+        if not stripped:
+            return False
+        return any(char.isalpha() for char in stripped)
+
     def _build_context_lines(self, history: list[QAItem]) -> str:
         if not history:
             return "No prior Q&A yet."
         return "\n".join(
             f"Q{i + 1}: {item.question}\nA{i + 1}: {item.answer}" for i, item in enumerate(history)
         )
+
+    @staticmethod
+    def _normalize_question(text: str) -> str:
+        return re.sub(r"[\W_]+", "", text).lower()
+
+    def _is_duplicate_question(self, question: str, history: list[QAItem]) -> bool:
+        normalized = self._normalize_question(question)
+        if not normalized:
+            return False
+        for item in history:
+            previous = self._normalize_question(item.question)
+            if not previous:
+                continue
+            if normalized == previous or normalized in previous or previous in normalized:
+                return True
+            if len(normalized) >= 6 and len(previous) >= 6:
+                if SequenceMatcher(None, normalized, previous).ratio() >= 0.9:
+                    return True
+        return False
 
     def ask_question(
         self,
@@ -139,6 +169,8 @@ class LLMEngine:
         question: str,
         history: list[QAItem],
     ) -> str:
+        if not self._is_meaningful_question(question):
+            return "Irrelevant"
         context_block = self._build_context_lines(history)
         user_prompt = (
             f"[Surface]\n{surface}\n\n"
@@ -209,6 +241,8 @@ class LLMEngine:
             raw = response.choices[0].message.content or ""
             action = self._parse_bob_action(raw)
             if action:
+                if action.action == "question" and self._is_duplicate_question(action.text, history):
+                    continue
                 return action
 
         return BobAction(

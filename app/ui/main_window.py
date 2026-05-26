@@ -227,16 +227,6 @@ class TurtleSoupApp(ctk.CTk):
         self.story_action_row = ctk.CTkFrame(self.menu_screen, fg_color="transparent")
         self.story_action_row.grid(row=4, column=0, padx=24, pady=(0, 16), sticky="ew")
         self.story_action_row.grid_columnconfigure(0, weight=1)
-        self.story_back_button = ctk.CTkButton(
-            self.story_action_row,
-            text=_ui_text("Back to Player Select"),
-            command=self._go_to_player_screen,
-            font=self.base_font,
-            image=self.pixel_images.get("button_icon"),
-            compound="left",
-            **self._pixel_button_style(primary=False),
-        )
-        self.story_back_button.pack(side="left")
         self.leaderboard_button = ctk.CTkButton(
             self.story_action_row,
             text=_ui_text("View Leaderboard"),
@@ -1228,7 +1218,7 @@ class TurtleSoupApp(ctk.CTk):
                 )
                 return
             try:
-                action = self.llm.generate_bob_action(surface=story.surface, history=self.session.history)
+                action = self.llm.generate_bob_action(surface=story.surface, history=self.session.full_history)
             except OpenAIError:
                 self.after(
                     0,

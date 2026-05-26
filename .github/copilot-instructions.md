@@ -53,6 +53,7 @@ There is currently no lint/type-check tool configuration (no `ruff`, `flake8`, `
 - LLM answer normalization is intentionally tolerant of multilingual/noisy outputs, but only canonicalizes to `Yes`, `No`, or `Irrelevant`.
 - Audio is event-name driven (`click`, `thinking`, `message_user`, `message_agent`, `success`, `fail`, `startup`) and wired in one place (`SoundManager._load_effects` + `_setup_channels`).
 - The startup overlay sequence and credit text are first-class UI behavior; keep this flow intact when modifying boot logic.
+- All trigger sound effects for new interfaces and actions must maintain consistency with the game's UI and audio style. (All image assets are sourced from PixelPete's Art Assets; please note the individual cropping requirements. All sound effects are located in 'audio_res'.)
 
 ## Runtime environment details worth preserving
 

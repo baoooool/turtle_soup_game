@@ -21,6 +21,7 @@ class GameSession:
     story: Story | None = None
     state: GameState = GameState.IDLE
     history: list[QAItem] = field(default_factory=list)
+    full_history: list[QAItem] = field(default_factory=list)
     context_window: int = 8
     bob_crying: bool = False
     player_name: str | None = None
@@ -29,16 +30,20 @@ class GameSession:
         self.story = None
         self.state = GameState.IDLE
         self.history.clear()
+        self.full_history.clear()
         self.bob_crying = False
 
     def start_story(self, story: Story) -> None:
         self.story = story
         self.state = GameState.QUESTIONING
         self.history.clear()
+        self.full_history.clear()
         self.bob_crying = False
 
     def add_qa(self, question: str, answer: ParsedAnswer) -> None:
-        self.history.append(QAItem(question=question, answer=answer))
+        item = QAItem(question=question, answer=answer)
+        self.full_history.append(item)
+        self.history.append(item)
         if len(self.history) > self.context_window:
             self.history = self.history[-self.context_window :]
 
